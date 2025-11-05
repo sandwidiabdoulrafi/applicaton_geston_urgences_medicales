@@ -7,7 +7,7 @@ export default function PatientLayout() {
     return (
         <Tabs
             screenOptions={{
-                headerShown: false,
+                headerShown: true,
                 headerStyle: {
                     backgroundColor: "#007AFF",
                 },
