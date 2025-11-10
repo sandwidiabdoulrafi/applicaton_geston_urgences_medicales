@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
+import InitDB from '../Routes/routeRoom/index';
 
     export const unstable_settings = {
         initialRouteName: 'patient', // pardefaut pour le test
@@ -22,6 +23,8 @@ import { useEffect, useState } from 'react';
 
         
         const checkRole = async ()=>{
+
+            InitDB();
 
             await AsyncStorage.setItem("userRole", "patient");
 

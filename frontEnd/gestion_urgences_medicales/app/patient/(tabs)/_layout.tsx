@@ -7,9 +7,10 @@ export default function PatientLayout() {
     return (
         <Tabs
             screenOptions={{
-                headerShown: false,
+                headerShown: true,
+                headerTitleAlign: "center",
                 headerStyle: {
-                    backgroundColor: "#007AFF",
+                    backgroundColor: "#58D68D",
                 },
                 headerTintColor: "#fff",
                 headerTitleStyle: {
@@ -81,9 +82,9 @@ export default function PatientLayout() {
                 }}
             />
 
-        {/* Notifications */}
+        {/* CHAT */}
         <Tabs.Screen
-            name="notifications"
+            name="chat"
             options={{
                 tabBarLabel: ({ focused }) => (
                     <Text
@@ -94,13 +95,13 @@ export default function PatientLayout() {
                         color: focused ? "#2E86C1" : "#FFFFFF",
                     }}
                     >
-                        Notifications
+                        Discussions
                     </Text>
                 ),
                 tabBarIcon: ({ focused }) => (
                     <Ionicons
-                        name={focused ? "notifications" : "notifications-outline"}
-                        size={30}
+                    name={focused ? "chatbubbles" : "chatbubbles-outline"}
+                    size={30}
                         color={focused ? "#2E86C1" : "#FFFFFF"}
                     />
                 ),
