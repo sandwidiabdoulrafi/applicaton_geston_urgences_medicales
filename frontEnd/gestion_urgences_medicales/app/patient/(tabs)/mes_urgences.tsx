@@ -1,8 +1,8 @@
 import RenderItemUrgence from '@/components/renderItemUrgence';
 import SearchBarre from '@/components/searchBarre';
 import { Ionicons } from '@expo/vector-icons';
-import { Stack } from 'expo-router';
-import React, { useState, useMemo, useEffect } from 'react';
+import { Stack, useFocusEffect } from 'expo-router';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet} from 'react-native';
 import RoutesRoom from '../../../Routes/routeRoom/roomUrgences';
 import LoadingAnimation from '@/components/LoadingAnimation';
@@ -16,21 +16,44 @@ export default function Mes_urgences() {
     const [urgencesParStatut, setUrgencesParStatut] = useState([]); 
     const [urgencesAffichees, setUrgencesAffichees] = useState([]); 
 
-    useEffect(() => {
-        const fetchUrgences = async () => {
-            setIsLoad(true);
-            try {
-                const idPatient = 1;
-                const userUrgence = await RoutesRoom.getUrgencesByPatient(idPatient);
-                setUrgences(userUrgence);
-            } catch (error) {
-                console.log("Erreur lors de la récupération des urgences :", error);
-            } finally {
-                setIsLoad(false);
-            }
-        };
-        fetchUrgences();
-    }, []);
+    // useEffect(() => {
+    //     const fetchUrgences = async () => {
+    //         setIsLoad(true);
+    //         try {
+    //             const idPatient = 1;
+    //             const userUrgence = await RoutesRoom.getUrgencesByPatient(idPatient);
+    //             setUrgences(userUrgence);
+    //         } catch (error) {
+    //             console.log("Erreur lors de la récupération des urgences :", error);
+    //         } finally {
+    //             setIsLoad(false);
+    //         }
+    //     };
+    //     fetchUrgences();
+    // }, []);
+
+    useFocusEffect(
+        useCallback(() => {
+            const fetchUrgences = async () => {
+                setIsLoad(true);
+                try {
+                    const idPatient = 1;
+                    const userUrgence = await RoutesRoom.getUrgencesByPatient(idPatient);
+                    setUrgences(userUrgence);
+                } catch (error) {
+                    console.log("Erreur lors de la récupération des urgences :", error);
+                } finally {
+                    setIsLoad(false);
+                }
+            };
+    
+            fetchUrgences();
+    
+        }, [])
+    );
+
+
+
 
     // 🔸 Filtre selon le statut actif
     useEffect(() => {

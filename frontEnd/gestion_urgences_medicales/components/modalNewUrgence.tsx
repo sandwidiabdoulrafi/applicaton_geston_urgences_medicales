@@ -5,8 +5,9 @@ import * as Location from 'expo-location';
 import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
-import RoutesRoom from '../Routes/routeRoom/roomUrgences';
-import roomPatient from '@/Routes/routeRoom/roomPatient';
+import urgenceService from '../Routes/routeService/urgenceService'
+// import roomPatient from '@/Routes/routeRoom/roomPatient';
+// import socket from "../Routes/socket/socketClient"
 
 // Schéma de validation Yup
 const urgenceSchema = yup.object().shape({
@@ -152,11 +153,8 @@ export default function ModalNewUrgence({ modalVisible, closeModal }: ModalProps
         
         try {
 
-            const idPatient = await roomPatient.getAllPatientsId();
-
+            await urgenceService.createUrgence(data);
             
-            const localUrgenceId = await RoutesRoom.addNewUgenceLocal(idPatient[0].idPatient, data);
-            console.log('Urgence enregistrée localement avec ID:', localUrgenceId);
 
             Alert.alert(
                 'Succès', 

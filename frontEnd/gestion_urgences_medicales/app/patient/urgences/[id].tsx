@@ -7,6 +7,7 @@ import roomUrgences from '@/Routes/routeRoom/roomUrgences';
 import LoadingAnimation from '@/components/LoadingAnimation';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker } from 'react-native-maps';
+import urgenceService from '@/Routes/routeService/urgenceService';
 
 export default function UrgenceDetailPage() {
     const {id} = useLocalSearchParams();
@@ -41,7 +42,7 @@ export default function UrgenceDetailPage() {
     };
 
 
-    const deleteUrgence = async (urgenceId) => {
+    const delete_urgence = async (urgenceId, idLocal) => {
 
         Alert.alert(
             "Confirmation",
@@ -56,7 +57,8 @@ export default function UrgenceDetailPage() {
                     style: "destructive",
                     onPress: async () => {
                         try {
-                            await roomUrgences.deleteUrgence(urgenceId);
+                            await urgenceService.deleteThisUrgence(urgenceId, idLocal);
+                            
                             Alert.alert("Succès", "Urgence supprimée avec succès !");
                             router.back();
                         } catch (error) {
@@ -342,7 +344,7 @@ export default function UrgenceDetailPage() {
                 
                     <TouchableOpacity 
                         style={styles.actionButton}
-                        onPress={() => deleteUrgence(urgence.idUrgence)}
+                        onPress={() => delete_urgence(urgence.idUrgence, urgence.id)}
                     >
                         <Ionicons name="close-circle" size={20} color="#fff" />
                         <Text style={[styles.actionButtonText, { color: '#fff' }]}>

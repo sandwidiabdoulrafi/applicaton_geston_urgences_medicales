@@ -12,7 +12,7 @@ export async function  initUrgences(){
         db.execSync(`
             CREATE TABLE IF NOT EXISTS Urgences (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                idUrgence INTEGER,
+                idUrgence TEXT,
                 idPatient INTEGER,
                 idAssistant INTEGER,
                 intitule TEXT,
@@ -36,6 +36,7 @@ export async function addNewUgenceLocal(idPatient, dataForm) {
         return Promise.reject('SQLite non disponible');
     }
 
+
     try {
         //  Nouvelle API : runSync au lieu de transaction + executeSql
         const result = db.runSync(
@@ -43,13 +44,13 @@ export async function addNewUgenceLocal(idPatient, dataForm) {
             (idUrgence, idPatient, idAssistant, intitule, description, dateCreation, statut, priorite, latitude, longitude)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
-                null,
+                dataForm.idUrgence,
                 idPatient,
                 null,
                 dataForm.intitule,
                 dataForm.description,
-                new Date().toISOString(),
-                'en_attente',
+                dataForm.dateCreation,
+                dataForm.statut,
                 dataForm.priorite,
                 dataForm.latitude,
                 dataForm.longitude
@@ -64,25 +65,7 @@ export async function addNewUgenceLocal(idPatient, dataForm) {
     }
 }
 
-// Mettre à jour l'ID du serveur une fois la requête API réussie
-export async function updateUgenceId(localId, idServeur) {
-    if (!db) {
-        console.warn('⚠️ Base de données non disponible');
-        return;
-    }
-    
-    try {
-        // ✅ Nouvelle API : runSync au lieu de transaction + executeSql
-        db.runSync(
-            `UPDATE Urgences SET idUrgence = ? WHERE id = ?`,
-            [idServeur, localId]
-        );
-        console.log("✅ ID serveur mis à jour dans SQLite");
-    } catch (error) {
-        console.error("❌ Erreur MAJ SQLite:", error);
-        throw error;
-    }
-}
+
 
 // Récupérer toutes les urgences d'un patient
 export async function getUrgencesByPatient(idPatient) {
@@ -95,6 +78,7 @@ export async function getUrgencesByPatient(idPatient) {
             `SELECT * FROM Urgences WHERE idPatient = ? ORDER BY dateCreation DESC`,
             [idPatient]
         );
+        
         console.log(`✅ ${result.length} urgence(s) récupérée(s)`);
         return result;
     } catch (error) {
@@ -128,6 +112,7 @@ export async function deleteUrgence(id) {
     }
 
     try {
+        console.log("+-=-=-=-=- ✅ Urgence supprimée :::::  ", id);
         db.runSync(`DELETE FROM Urgences WHERE id = ?`, [id]);
         console.log("✅ Urgence supprimée");
     } catch (error) {
@@ -140,7 +125,7 @@ export async function deleteUrgence(id) {
 export default {
     initUrgences,
     addNewUgenceLocal,
-    updateUgenceId,
+    // updateUgenceId,
     getUrgencesByPatient,
     deleteUrgence,
     getUrgenceById,
