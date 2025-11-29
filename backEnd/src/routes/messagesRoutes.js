@@ -5,7 +5,13 @@ const {
     getMessagesByUrgence,
     updateMessageStatus,
     deleteMessage,
+    uploadMedia,
 } = require("../controllers/messagesController");
+
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage() });
+
+
 
 // Ajouter un message
 router.post("/ajouter", addMessage);
@@ -19,4 +25,9 @@ router.put("/:idMessage", updateMessageStatus);
 //Supprimer un message
 router.delete("/:idMessage", deleteMessage);
 
+
+// sauvergarde des fichier du message
+router.post("/upload",upload.single('file'), uploadMedia);
+
 module.exports = router;
+    

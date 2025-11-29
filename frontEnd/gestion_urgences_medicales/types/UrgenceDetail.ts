@@ -11,3 +11,4 @@ export default interface UrgenceDetail {
     latitude?: number;
     longitude?: number;
 }
+

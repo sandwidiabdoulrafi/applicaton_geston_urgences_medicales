@@ -4,11 +4,21 @@ import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import roomPatient from '../../../Routes/routeRoom/roomPatient';
+import { LogOutPatient } from '@/Routes/routeService/PatientService';
+import { useAuth } from '@/app/contexts/AuthContext';
 
 export default function Profil() {
     const router = useRouter();
     const [patient, setPatient] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+        const {signOut} = useAuth()
+
+    const formatValue = (value: any, defaultText: string = 'Non renseigné'): string => {
+        if (value === null || value === undefined) return defaultText;
+        if (typeof value === 'string' && value.trim() === '') return defaultText;
+        if (typeof value === 'number' && value === 0) return defaultText;
+        return String(value);
+    };
 
     useEffect(() => {
         loadPatient();
@@ -16,9 +26,10 @@ export default function Profil() {
 
     const loadPatient = async () => {
         try {
-            // Récupérer le premier patient (car un seul utilisateur dans l'app)
-            const patients = await roomPatient.getAllPatients();
+            const patients = await roomPatient.getUserPatient();
+
             if (patients && patients.length > 0) {
+                console.log("\n\n l'utilisateur inscrit avec ses informations : ", patients);
                 setPatient(patients[0]);
             }
         } catch (error) {
@@ -67,13 +78,23 @@ export default function Profil() {
                     text: 'Déconnexion',
                     style: 'destructive',
                     onPress: async () => {
-                        await roomPatient.logoutPatient();
-                        router.replace('/auth/login'); // À adapter selon votre route
+                        const response = await LogOutPatient();
+
+                        if(response.success){
+                            await signOut()
+                        }
                     }
                 }
             ]
         );
     };
+
+
+
+
+
+
+
 
     const formatDate = (dateString: string) => {
         if (!dateString) return 'Non renseigné';
@@ -87,8 +108,17 @@ export default function Profil() {
 
     const calculateAge = (dateString: string) => {
         if (!dateString) return null;
+        
+        // Gérer le format DD/MM/YYYY
+        let birthDate: Date;
+        if (dateString.includes('/')) {
+            const [day, month, year] = dateString.split('/');
+            birthDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+        } else {
+            birthDate = new Date(dateString);
+        }
+
         const today = new Date();
-        const birthDate = new Date(dateString);
         let age = today.getFullYear() - birthDate.getFullYear();
         const m = today.getMonth() - birthDate.getMonth();
         if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
@@ -115,7 +145,7 @@ export default function Profil() {
                 <Text style={styles.errorText}>Aucun patient connecté</Text>
                 <TouchableOpacity 
                     style={styles.loginButton}
-                    onPress={() => router.push('/auth/login')}
+                    onPress={() => router.push('/auth/LoginPatient')}
                 >
                     <Text style={styles.loginButtonText}>Se connecter</Text>
                 </TouchableOpacity>
@@ -142,7 +172,7 @@ export default function Profil() {
                 {/* Header avec photo */}
                 <View style={styles.header}>
                     <View style={styles.photoContainer}>
-                        {patient.photoProfil ? (
+                        {patient.photoProfil && patient.photoProfil.trim() !== '' ? (
                             <Image 
                                 source={{ uri: patient.photoProfil }} 
                                 style={styles.photo}
@@ -173,6 +203,7 @@ export default function Profil() {
                     <Text style={styles.sectionTitle}>Informations personnelles</Text>
 
                     <View style={styles.infoCard}>
+                        {/* Email - toujours affiché */}
                         <View style={styles.infoRow}>
                             <Ionicons name="mail" size={20} color="#007AFF" />
                             <View style={styles.infoContent}>
@@ -181,37 +212,72 @@ export default function Profil() {
                             </View>
                         </View>
 
-                        {patient.telephone && (
-                            <View style={styles.infoRow}>
-                                <Ionicons name="call" size={20} color="#34C759" />
-                                <View style={styles.infoContent}>
-                                    <Text style={styles.infoLabel}>Téléphone</Text>
-                                    <Text style={styles.infoValue}>{patient.telephone}</Text>
-                                </View>
+                        {/* Téléphone */}
+                        <View style={styles.infoRow}>
+                            <Ionicons name="call" size={20} color="#34C759" />
+                            <View style={styles.infoContent}>
+                                <Text style={styles.infoLabel}>Téléphone</Text>
+                                <Text style={[
+                                    styles.infoValue,
+                                    formatValue(patient.telephone) === 'Non renseigné' && styles.emptyValue
+                                ]}>
+                                    {formatValue(patient.telephone)}
+                                </Text>
                             </View>
-                        )}
+                        </View>
 
-                        {patient.dateNaissance && (
-                            <View style={styles.infoRow}>
-                                <Ionicons name="calendar" size={20} color="#FF9500" />
-                                <View style={styles.infoContent}>
-                                    <Text style={styles.infoLabel}>Date de naissance</Text>
-                                    <Text style={styles.infoValue}>
-                                        {formatDate(patient.dateNaissance)}
-                                    </Text>
-                                </View>
+                        {/* Date de naissance */}
+                        <View style={styles.infoRow}>
+                            <Ionicons name="calendar" size={20} color="#FF9500" />
+                            <View style={styles.infoContent}>
+                                <Text style={styles.infoLabel}>Date de naissance</Text>
+                                <Text style={styles.infoValue}>
+                                    {formatValue(patient.dateNaissance)}
+                                </Text>
                             </View>
-                        )}
+                        </View>
 
-                        {patient.lieuResidence && (
-                            <View style={styles.infoRow}>
-                                <Ionicons name="location" size={20} color="#FF3B30" />
-                                <View style={styles.infoContent}>
-                                    <Text style={styles.infoLabel}>Lieu de résidence</Text>
-                                    <Text style={styles.infoValue}>{patient.lieuResidence}</Text>
-                                </View>
+                        {/* Lieu de résidence */}
+                        <View style={styles.infoRow}>
+                            <Ionicons name="location" size={20} color="#FF3B30" />
+                            <View style={styles.infoContent}>
+                                <Text style={styles.infoLabel}>Lieu de résidence</Text>
+                                <Text style={[
+                                    styles.infoValue,
+                                    formatValue(patient.lieuResidence) === 'Non renseigné' && styles.emptyValue
+                                ]}>
+                                    {formatValue(patient.lieuResidence)}
+                                </Text>
                             </View>
-                        )}
+                        </View>
+
+                        {/* Poids */}
+                        <View style={styles.infoRow}>
+                            <Ionicons name="fitness" size={20} color="#5856D6" />
+                            <View style={styles.infoContent}>
+                                <Text style={styles.infoLabel}>Poids</Text>
+                                <Text style={[
+                                    styles.infoValue,
+                                    formatValue(patient.poids) === 'Non renseigné' && styles.emptyValue
+                                ]}>
+                                    {patient.poids ? `${patient.poids} kg` : 'Non renseigné'}
+                                </Text>
+                            </View>
+                        </View>
+
+                        {/* Taille */}
+                        <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
+                            <Ionicons name="resize" size={20} color="#AF52DE" />
+                            <View style={styles.infoContent}>
+                                <Text style={styles.infoLabel}>Taille</Text>
+                                <Text style={[
+                                    styles.infoValue,
+                                    formatValue(patient.taille) === 'Non renseigné' && styles.emptyValue
+                                ]}>
+                                    {patient.taille ? `${patient.taille} cm` : 'Non renseigné'}
+                                </Text>
+                            </View>
+                        </View>
                     </View>
                 </View>
 
@@ -220,27 +286,45 @@ export default function Profil() {
                     <Text style={styles.sectionTitle}>Informations médicales</Text>
 
                     <View style={styles.infoCard}>
-                        {patient.groupeSanguin && (
-                            <View style={styles.infoRow}>
-                                <Ionicons name="water" size={20} color="#FF3B30" />
-                                <View style={styles.infoContent}>
-                                    <Text style={styles.infoLabel}>Groupe sanguin</Text>
-                                    <Text style={[styles.infoValue, styles.bloodType]}>
-                                        {patient.groupeSanguin}
-                                    </Text>
-                                </View>
+                        {/* Groupe sanguin */}
+                        <View style={styles.infoRow}>
+                            <Ionicons name="water" size={20} color="#FF3B30" />
+                            <View style={styles.infoContent}>
+                                <Text style={styles.infoLabel}>Groupe sanguin</Text>
+                                <Text style={[
+                                    styles.infoValue,
+                                    styles.bloodType,
+                                    formatValue(patient.groupeSanguin) === 'Non renseigné' && styles.emptyValue
+                                ]}>
+                                    {formatValue(patient.groupeSanguin)}
+                                </Text>
                             </View>
-                        )}
+                        </View>
 
-                        {patient.numeroUrgence && (
-                            <View style={styles.infoRow}>
-                                <Ionicons name="call-outline" size={20} color="#FF9500" />
-                                <View style={styles.infoContent}>
-                                    <Text style={styles.infoLabel}>Contact d'urgence</Text>
-                                    <Text style={styles.infoValue}>{patient.numeroUrgence}</Text>
-                                </View>
+                        {/* Numéro d'urgence */}
+                        <View style={styles.infoRow}>
+                            <Ionicons name="call-outline" size={20} color="#FF9500" />
+                            <View style={styles.infoContent}>
+                                <Text style={styles.infoLabel}>Contact d'urgence</Text>
+                                <Text style={[
+                                    styles.infoValue,
+                                    formatValue(patient.numeroUrgence) === 'Non renseigné' && styles.emptyValue
+                                ]}>
+                                    {formatValue(patient.numeroUrgence)}
+                                </Text>
                             </View>
-                        )}
+                        </View>
+
+                        {/* Maladie chronique */}
+                        <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
+                            <Ionicons name="medkit" size={20} color="#FF2D55" />
+                            <View style={styles.infoContent}>
+                                <Text style={styles.infoLabel}>Maladie chronique</Text>
+                                <Text style={styles.infoValue}>
+                                    {patient.maladieChronique ? 'Oui' : 'Non'}
+                                </Text>
+                            </View>
+                        </View>
                     </View>
                 </View>
 
@@ -445,6 +529,11 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: '#1A1A1A',
         fontWeight: '500',
+    },
+    emptyValue: {
+        color: '#999',
+        fontStyle: 'italic',
+        fontWeight: '400',
     },
     bloodType: {
         fontSize: 18,

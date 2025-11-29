@@ -1,4 +1,5 @@
 export default interface Discussion {
+    unreadCount: number;
     idUrgence: number;
     intitule: string;
     description: string;

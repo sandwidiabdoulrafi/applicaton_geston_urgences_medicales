@@ -1,5 +1,5 @@
 // socket/messageSocket.js
-const { db } = require("../config/firebaseConfig");
+const { db, bucket } = require("../config/firebaseConfig");
 const { getIO } = require("../config/socketConfig");
 
 module.exports = (socket) => {
@@ -8,80 +8,117 @@ module.exports = (socket) => {
     /**
      * ➕ Ajouter un nouveau message
      */
-    socket.on("newMessage", async (newMessage) => {
+    
+    
+    socket.on("message:add", async (newMessage) => {
+        console.log(`📨 [message:add] Données reçues:`, newMessage);
+
         try {
+            // ✅ Validation des champs obligatoires
             if (!newMessage.idUrgence || !newMessage.type || !newMessage.sender) {
-                return socket.emit("newMessageError", { message: "Champs obligatoires manquants." });
+                return socket.emit("message:error", { 
+                    message: "Champs obligatoires manquants.",
+                    field: !newMessage.idUrgence ? 'idUrgence' : !newMessage.type ? 'type' : 'sender'
+                });
             }
 
             const validTypes = ["text", "image", "video", "document", "audio"];
             const validSenders = ["patient", "assistant"];
 
             if (!validTypes.includes(newMessage.type)) {
-                return socket.emit("newMessageError", { message: "Type de message invalide." });
+                return socket.emit("message:error", { 
+                    message: `Type de message invalide: ${newMessage.type}. Types valides: ${validTypes.join(', ')}` 
+                });
             }
 
             if (!validSenders.includes(newMessage.sender)) {
-                return socket.emit("newMessageError", { message: "Sender invalide." });
+                return socket.emit("message:error", { 
+                    message: `Sender invalide: ${newMessage.sender}. Valeurs valides: ${validSenders.join(', ')}` 
+                });
             }
 
+            // ✅ Ajouter timestamp côté serveur (plus fiable)
             const timestamp = new Date().toISOString();
 
+            // ✅ Sauvegarder dans Firebase
             const docRef = await db.collection("messages").add({
-                ...newMessage,
+                idUrgence: newMessage.idUrgence,
+                type: newMessage.type,
+                sender: newMessage.sender,
+                text: newMessage.text || null,
+                uri: newMessage.uri || null,
+                fileName: newMessage.fileName || null,
+                duration: newMessage.duration || null,
                 timestamp,
-                status: newMessage.status || "envoi",
+                status: "envoye", 
             });
 
+            // ✅ Message complet avec ID Firebase
             const messageData = {
-                id: docRef.id,
-                ...newMessage,
+                idMessage: docRef.id,
+                idUrgence: newMessage.idUrgence,
+                type: newMessage.type,
+                sender: newMessage.sender,
+                text: newMessage.text || null,
+                uri: newMessage.uri || null,
+                fileName: newMessage.fileName || null,
+                duration: newMessage.duration || null,
                 timestamp,
-                status: newMessage.status || "envoi",
+                status: "envoye",
             };
 
-            // 🔹 Diffuser le message à la salle de l'urgence (patient + service de santé)
+            // 🔹 Diffuser à TOUTE la salle de l'urgence
             const io = getIO();
             io.to(`urgence_${newMessage.idUrgence}`).emit("message:new", messageData);
 
             // 🔸 Confirmer au client émetteur
-            socket.emit("newMessageSuccess", {
+            socket.emit("message:success", {
                 success: true,
                 message: "Message ajouté avec succès.",
                 data: messageData,
             });
 
-            console.log(`📩 Message ajouté pour urgence_${newMessage.idUrgence}`);
+            console.log(`\n\n\n\n\n\n =-=-=-=-=-=-=-=-=-=-=-=-=-==Les data inscrit sont :  `, messageData);
+
+            console.log(`✅ Message ajouté: ${docRef.id} pour urgence_${newMessage.idUrgence}`);
         } catch (error) {
-            console.error("Erreur ajout message :", error);
-            socket.emit("newMessageError", { message: "Erreur lors de l'ajout du message." });
+            console.error("❌ Erreur ajout message:", error);
+            socket.emit("message:error", { 
+                message: "Erreur lors de l'ajout du message.",
+                error: error.message 
+            });
         }
     });
 
     /**
      * 📥 Récupérer les messages d’une urgence
      */
-    socket.on("getMessagesByUrgence", async (idUrgence) => {
+    socket.on("message:getByUrgence", async (idUrgence) => {
+        console.log(`📥 [message:getByUrgence] idUrgence:`, idUrgence);
+
         try {
             const snapshot = await db
                 .collection("messages")
-                .where("idUrgence", "==", idUrgence)
+                .where("idUrgence", "==", parseInt(idUrgence))
                 .orderBy("timestamp", "asc")
                 .get();
 
             const messages = snapshot.docs.map((doc) => ({
-                id: doc.id,
+                idMessage: doc.id,
                 ...doc.data(),
             }));
 
-            socket.emit("getMessagesByUrgenceSuccess", messages);
+            socket.emit("message:list", messages);
+            console.log(`✅ ${messages.length} messages récupérés pour urgence ${idUrgence}`);
         } catch (error) {
-            console.error("Erreur récupération messages :", error);
-            socket.emit("getMessagesByUrgenceError", {
+            console.error("❌ Erreur récupération messages:", error);
+            socket.emit("message:error", {
                 message: "Erreur lors de la récupération des messages.",
+                error: error.message
             });
         }
     });
+
 
     /**
      * 🔄 Mettre à jour le statut d’un message
@@ -124,33 +161,102 @@ module.exports = (socket) => {
         }
     });
 
+    socket.on("message:updateStatus", async ({ idMessage, status }) => {
+        console.log(`🔄 [message:updateStatus] ${idMessage} -> ${status}`);
+
+        try {
+            const validStatus = ["envoi", "envoye", "erreur", "lu"];
+            if (!validStatus.includes(status)) {
+                return socket.emit("message:error", { 
+                    message: `Statut invalide: ${status}. Valeurs valides: ${validStatus.join(', ')}` 
+                });
+            }
+
+            const docRef = db.collection("messages").doc(idMessage);
+            const doc = await docRef.get();
+
+            if (!doc.exists) {
+                return socket.emit("message:error", { message: "Message introuvable." });
+            }
+
+            const idUrgence = doc.data().idUrgence;
+
+            await docRef.update({ status });
+
+            // Notifier toute la salle
+            const io = getIO();
+            io.to(`urgence_${idUrgence}`).emit("message:statusChanged", { 
+                idMessage, 
+                status 
+            });
+
+            socket.emit("message:success", {
+                success: true,
+                message: "Statut mis à jour.",
+                data: { idMessage, status },
+            });
+
+            console.log(`✅ Statut mis à jour: ${idMessage} -> ${status}`);
+        } catch (error) {
+            console.error("❌ Erreur mise à jour message:", error);
+            socket.emit("message:error", {
+                message: "Erreur lors de la mise à jour du message.",
+                error: error.message
+            });
+        }
+    });
+
     /**
      * 🗑️ Supprimer un message
      */
-    socket.on("deleteMessage", async (idMessage) => {
+
+    socket.on("message:delete", async (data) => {
+        const idMessage = data.idMessage || data;
+        console.log(`🗑️  [message:delete] idMessage:`, idMessage);
+
         try {
             const docRef = db.collection("messages").doc(idMessage);
             const doc = await docRef.get();
 
             if (!doc.exists) {
-                return socket.emit("deleteMessageError", { message: "Message introuvable." });
+                return socket.emit("message:error", { message: "Message introuvable." });
             }
 
-            const idUrgence = doc.data().idUrgence;
+            const messageData = doc.data().idUrgence;
+            const id = messageData.idUrgence ; 
+
+
+
+            if (messageData.fileUrl && messageData.type !== 'text') {
+                try {
+                    const fileName = messageData.fileUrl.split('/').pop().split('?')[0];
+                    const filePath = `messages/${idUrgence}/${decodeURIComponent(fileName)}`;
+                    await bucket.file(filePath).delete();
+                    console.log(`🗑️  Fichier supprimé: ${filePath}`);
+                } catch (fileError) {
+                    console.error("⚠️  Erreur suppression fichier:", fileError.message);
+                }
+            }
+
+
             await docRef.delete();
 
-            // Informer uniquement la salle liée
+            // Informer toute la salle
             const io = getIO();
-            io.to(`urgence_${idUrgence}`).emit("message:deleted", { id: idMessage });
+            io.to(`urgence_${idUrgence}`).emit("message:deleted", idMessage);
 
-            socket.emit("deleteMessageSuccess", {
+            socket.emit("message:success", {
                 success: true,
                 message: "Message supprimé avec succès.",
+                data: { idMessage }
             });
+
+            console.log(`✅ Message supprimé: ${idMessage}`);
         } catch (error) {
-            console.error("Erreur suppression message :", error);
-            socket.emit("deleteMessageError", {
+            console.error("❌ Erreur suppression message:", error);
+            socket.emit("message:error", {
                 message: "Erreur lors de la suppression du message.",
+                error: error.message
             });
         }
     });

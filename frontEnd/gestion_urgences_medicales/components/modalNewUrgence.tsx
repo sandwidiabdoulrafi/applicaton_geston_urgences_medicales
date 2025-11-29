@@ -6,6 +6,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import urgenceService from '../Routes/routeService/urgenceService'
+import AsyncStorage from '@react-native-async-storage/async-storage';
 // import roomPatient from '@/Routes/routeRoom/roomPatient';
 // import socket from "../Routes/socket/socketClient"
 
@@ -49,11 +50,33 @@ interface ModalProps {
 export default function ModalNewUrgence({ modalVisible, closeModal }: ModalProps) {
     const [loadingLocation, setLoadingLocation] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [userPatient, setUserPatient] = useState<string | null>(null);
 
     // Animation pour le swipe
     const translateY = useRef(new Animated.Value(0)).current;
     const lastGesture = useRef(0);
 
+    useEffect(() => {
+        const loadPatient = async () => {
+            try {
+                const stored = await AsyncStorage.getItem("userPatient");
+    
+                if (stored !== null) {
+                    const parsed = JSON.parse(stored);
+                    console.log("Données récupérées : ", parsed);
+                    setUserPatient(parsed); 
+                } else {
+                    console.log("Aucune donnée userPatient trouvée dans le stockage.");
+                }
+                // J'ai supprimé le deuxième JSON.parse(stored) qui était ici et causait des soucis
+            } catch (e) {
+                console.log("Erreur récupération patient :", e);
+            }
+        };
+    
+        loadPatient();
+    }, []);
+    
     const {
         control,
         handleSubmit,
@@ -70,6 +93,7 @@ export default function ModalNewUrgence({ modalVisible, closeModal }: ModalProps
             dateHeure: new Date(),
             latitude: undefined,
             longitude: undefined,
+            idPatient:userPatient?.idPatient || "P_001",
         },
     });
 

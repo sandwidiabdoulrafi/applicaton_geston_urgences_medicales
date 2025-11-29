@@ -7,7 +7,7 @@ export default function AssistantTabsLayout() {
     return (
         <Tabs
             screenOptions={{
-                headerShown: false,
+                headerShown: true,
                 headerStyle: {
                     backgroundColor: '#34C759',
                 },
@@ -59,19 +59,19 @@ export default function AssistantTabsLayout() {
                 }}
             />
 
-            {/* 3️⃣ Patients (recherche + historiques) */}
+            {/* 3️⃣ Discussions des urgence  */}
             <Tabs.Screen
-                name="patients"
+                name="discussion"
                 options={{
-                    title: 'Patients',
+                    title: 'Discussion',
                     tabBarIcon: ({ focused }) => (
                         <Ionicons 
-                            name={focused ? "people" : "people-outline"} 
+                            name={focused ? "chatbubble" : "chatbubble-outline"} 
                             size={focused ? 28 : 24}
                             color={focused ? "#007AFF" : "#8E8E93"} 
                         />
                     ),
-                    tabBarActiveTintColor: "#007AFF", // Bleu pour patients
+                    tabBarActiveTintColor: "#007AFF", 
                 }}
             />
 

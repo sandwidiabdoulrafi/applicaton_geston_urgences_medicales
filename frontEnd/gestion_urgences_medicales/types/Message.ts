@@ -11,3 +11,26 @@ export default interface Message {
     timestamp: string;
     status: 'envoi' | 'envoye' | 'erreur' | 'lu';
 }
+
+
+
+
+// export default interface NewMessage {
+//     id?: number; 
+//     idMessage: string; // UUID
+//     idUrgence: number;
+//     idEmeteur: number;
+
+//     sender: "patient" | "service";
+
+//     text?: string | null;
+
+//     type: "text" | "image" | "video" | "document" | "audio";
+
+//     uri?: string | null;      
+//     fileName?: string | null; 
+//     duration?: number | null; 
+
+//     timestamp: string; 
+//     status: "envoi" | "envoye" | "erreur" | "lu";
+// }

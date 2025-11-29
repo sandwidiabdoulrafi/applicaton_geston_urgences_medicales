@@ -7,6 +7,7 @@ import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import roomPatient from '../../../Routes/routeRoom/roomPatient';
 import LoadingAnimation from '@/components/LoadingAnimation';
+import { changePassword } from '@/Routes/routeService/PatientService';
 
 // Schéma de validation pour changement de mot de passe
 const changePasswordSchema = yup.object().shape({
@@ -66,7 +67,7 @@ export default function Security() {
 
     const loadPatient = async () => {
         try {
-            const patients = await roomPatient.getAllPatients();
+            const patients = await roomPatient.getUserPatient();
             if (patients && patients.length > 0) {
                 setPatient(patients[0]);
             }
@@ -116,32 +117,44 @@ export default function Security() {
         setIsSubmitting(true);
 
         try {
-            // Vérifier le mot de passe actuel
-            if (data.currentPassword !== patient.motDePasse) {
-                Alert.alert('Erreur', 'Le mot de passe actuel est incorrect');
-                setIsSubmitting(false);
-                return;
-            }
+            
+            const responseChangePasseword =await changePassword({
 
-            // Mettre à jour le mot de passe
-            // ⚠️ EN PRODUCTION: Hasher avec bcrypt avant de sauvegarder
-            await roomPatient.updatePatient(patient.idPatient, {
-                motDePasse: data.newPassword
+                
+                currentPassword: data.currentPassword,
+                newPassword: data.newPassword,
+                email: patient.email,
             });
 
-            Alert.alert(
-                'Succès',
-                'Votre mot de passe a été modifié avec succès',
-                [
-                    {
-                        text: 'OK',
-                        onPress: () => {
-                            reset();
-                            router.back();
+            if (responseChangePasseword.success) {
+                Alert.alert(
+                    'Succès',
+                    'Votre mot de passe a été modifié avec succès',
+                    [
+                        {
+                            text: 'OK',
+                            onPress: () => {
+                                reset();
+                                router.back();
+                            }
                         }
-                    }
-                ]
-            );
+                    ]
+                );
+                
+            } else {
+                Alert.alert(
+                    'Erreur',
+                    "Votre mot de passe n'a pas été modifié.",
+                    [
+                        {
+                            text: 'OK',
+                            
+                        }
+                    ]
+                );
+            }
+
+            
         } catch (error) {
             console.error('Erreur changement mot de passe:', error);
             Alert.alert('Erreur', 'Impossible de changer le mot de passe');

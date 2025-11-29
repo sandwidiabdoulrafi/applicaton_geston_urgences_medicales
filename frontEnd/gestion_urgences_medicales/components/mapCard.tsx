@@ -1,12 +1,14 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView } from "react-native";
-import MapView, { Marker, Callout, Polyline, PROVIDER_GOOGLE, Circle } from "react-native-maps";
+import MapView, { Marker, Callout, PROVIDER_GOOGLE, Circle } from "react-native-maps";
 import { Ionicons } from '@expo/vector-icons';
 import ServiceSante from "@/types/ServiceSante";
 import LocationCoords from "@/types/LocationCoords";
 import ServiceMap from "./maps/ServiceMap"
 import ServiceCard from "./maps/ServiceCard";
+import MapViewDirections from 'react-native-maps-directions';
 import LoadingAnimation from "./LoadingAnimation";
+import ServiceSanteService from "@/Routes/routeService/ServiceSanteService";
 
 // Constante pour la clé API Google Maps (à mettre dans vos variables d'environnement)
 const GOOGLE_MAPS_API_KEY = "AIzaSyB20s2RlKpQQ0VuG7095yutfwlefA_VZAQ";
@@ -21,63 +23,49 @@ export default function MapCard({ steShowButtonUrgence, listeToShow, getResultFi
     const [duration, setDuration] = useState<string | null>(null);
     const [isLoadingRoute, setIsLoadingRoute] = useState(false);
     const [isShowMore, setIsShoMore] = useState(false);
+    const [healthServices, setHealthServices] = useState<ServiceSante[]>([]);
     
     const mapRef = useRef<MapView>(null);
 
-    // Services de santé (à remplacer par API)
-    const healthServices: ServiceSante[] = [
-        {
-            id: 1,
-            nomEtablissement: "Hôpital Yalgado Ouédraogo",
-            typeEtablissement: "Hôpital public",
-            telephone: "+226 25 30 50 00",
-            adresse: "Avenue de l'Indépendance, Ouagadougou",
-            ville: "Ouagadougou",
-            heureOuverture: "07h00",
-            heureFermeture: "18h00",
-            description: "Hôpital général offrant des services d'urgence, de chirurgie et de maternité.",
-            photoProfil: "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=400",
-            latitude: 12.3733,
-            longitude: -1.5197,
-        },
-        {
-            id: 2,
-            nomEtablissement: "Clinique Notre Dame",
-            typeEtablissement: "Clinique privée",
-            telephone: "+226 70 25 45 78",
-            adresse: "Quartier Koulouba, Ouagadougou",
-            ville: "Ouagadougou",
-            heureOuverture: "08h00",
-            heureFermeture: "20h00",
-            description: "Clinique moderne avec un service de consultation et de pédiatrie.",
-            photoProfil: "https://images.unsplash.com/photo-1586773860418-d37222d8fce3?w=400",
-            latitude: 12.365,
-            longitude: -1.512,
-        },
-        {
-            id: 3,
-            nomEtablissement: "Centre Médical Paul VI",
-            typeEtablissement: "Centre médical",
-            telephone: "+226 25 31 24 67",
-            adresse: "Zone 4, Ouagadougou",
-            ville: "Ouagadougou",
-            heureOuverture: "08h00",
-            heureFermeture: "17h00",
-            description: "Centre médical spécialisé en médecine générale et analyses.",
-            photoProfil: "https://images.unsplash.com/photo-1538108149393-fbbd81895907?w=400",
-            latitude: 12.3800,
-            longitude: -1.5300,
-        },
-    ];
+    
+    useEffect(() => {
+        const fetchServices = async () => {
+            if (!location) return;
+            
+            try {
+                const response = await ServiceSanteService.getServiceSanteProximity(location);
+    
+                // Vérifier que la réponse contient bien un tableau
+                if (response?.data && Array.isArray(response.data)) {
+                    setHealthServices(response.data);
+                } else {
+                    console.warn('Format de réponse inattendu:', response);
+                    setHealthServices([]);
+                }
+            } catch (error) {
+                console.error('Erreur lors de la récupération des services:', error);
+                setHealthServices([]); // Important : initialiser avec tableau vide en cas d'erreur
+            }
+        };
+        
+        fetchServices();
+    }, [location]);
+    
 
     // Filtrer les services par type et envoyer au parent
     useEffect(() => {
+        // Vérifier que healthServices existe et est un tableau
+        if (!healthServices || !Array.isArray(healthServices)) {
+            getResultFilterState([]);
+            return;
+        }
+        
         const filtered = filterType 
-            ? healthServices.filter(s => s.typeEtablissement.toLowerCase().includes(filterType.toLowerCase()))
+            ? healthServices.filter(s => s.typeEtablissement?.toLowerCase().includes(filterType.toLowerCase()))
             : healthServices;
         
         getResultFilterState(filtered);
-    }, [filterType]);
+    }, [filterType, healthServices]);
 
     useEffect(() => {
         ServiceMap.requestLocationPermission({
@@ -87,83 +75,6 @@ export default function MapCard({ steShowButtonUrgence, listeToShow, getResultFi
         });
     }, []);
     
-    // Fonction pour obtenir l'itinéraire réel via Google Maps Directions API
-    const getDirectionsRoute = async (origin: LocationCoords, destination: LocationCoords) => {
-        try {
-            const originStr = `${origin.latitude},${origin.longitude}`;
-            const destStr = `${destination.latitude},${destination.longitude}`;
-            
-            const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${originStr}&destination=${destStr}&key=${GOOGLE_MAPS_API_KEY}&mode=driving&language=fr`;
-            
-            const response = await fetch(url);
-            const data = await response.json();
-            
-            if (data.status === 'OK' && data.routes.length > 0) {
-                const route = data.routes[0];
-                const leg = route.legs[0];
-                
-                // Décoder le polyline
-                const points = decodePolyline(route.overview_polyline.points);
-                
-                // Retourner les informations de l'itinéraire
-                return {
-                    coordinates: points,
-                    distance: leg.distance.value, // en mètres
-                    distanceText: leg.distance.text,
-                    duration: leg.duration.text,
-                    durationValue: leg.duration.value, // en secondes
-                };
-            } else {
-                console.error('Erreur Directions API:', data.status);
-                return null;
-            }
-        } catch (error) {
-            console.error('Erreur lors de la récupération de l\'itinéraire:', error);
-            return null;
-        }
-    };
-
-    // Fonction pour décoder le polyline de Google Maps
-    const decodePolyline = (encoded: string): LocationCoords[] => {
-        const points: LocationCoords[] = [];
-        let index = 0;
-        let lat = 0;
-        let lng = 0;
-
-        while (index < encoded.length) {
-            let b;
-            let shift = 0;
-            let result = 0;
-            
-            do {
-                b = encoded.charCodeAt(index++) - 63;
-                result |= (b & 0x1f) << shift;
-                shift += 5;
-            } while (b >= 0x20);
-            
-            const dlat = ((result & 1) !== 0 ? ~(result >> 1) : (result >> 1));
-            lat += dlat;
-            
-            shift = 0;
-            result = 0;
-            
-            do {
-                b = encoded.charCodeAt(index++) - 63;
-                result |= (b & 0x1f) << shift;
-                shift += 5;
-            } while (b >= 0x20);
-            
-            const dlng = ((result & 1) !== 0 ? ~(result >> 1) : (result >> 1));
-            lng += dlng;
-            
-            points.push({
-                latitude: lat / 1e5,
-                longitude: lng / 1e5,
-            });
-        }
-        
-        return points;
-    };
 
     // Afficher l'itinéraire avec l'API Google Directions
     const showRoute = useCallback(async (service: ServiceSante) => {
@@ -171,48 +82,10 @@ export default function MapCard({ steShowButtonUrgence, listeToShow, getResultFi
 
         setSelectedService(service);
         setIsLoadingRoute(true);
+
+
+    setTimeout(() => setIsLoadingRoute(false), 800); 
         
-        try {
-            // Obtenir l'itinéraire réel
-            const routeData = await getDirectionsRoute(
-                { latitude: location.latitude, longitude: location.longitude },
-                { latitude: service.latitude, longitude: service.longitude }
-            );
-            
-            if (routeData) {
-                setRouteCoordinates(routeData.coordinates);
-                setDistance(routeData.distance / 1000); // Convertir en km
-                setDuration(routeData.duration);
-                
-                // Animer la carte pour montrer tout l'itinéraire
-                if (mapRef.current) {
-                    mapRef.current.fitToCoordinates(routeData.coordinates, {
-                        edgePadding: { top: 100, right: 50, bottom: 300, left: 50 },
-                        animated: true,
-                    });
-                }
-            } else {
-                // Fallback: ligne droite si l'API échoue
-                const route = [
-                    { latitude: location.latitude, longitude: location.longitude },
-                    { latitude: service.latitude, longitude: service.longitude },
-                ];
-                setRouteCoordinates(route);
-                
-                const dist = ServiceMap.calculateDistance(
-                    location.latitude,
-                    location.longitude,
-                    service.latitude,
-                    service.longitude
-                );
-                setDistance(dist);
-                setDuration(null);
-            }
-        } catch (error) {
-            console.error('Erreur showRoute:', error);
-        } finally {
-            setIsLoadingRoute(false);
-        }
     }, [location]);
 
     const openModal = (serviceSelected) => {
@@ -259,7 +132,7 @@ export default function MapCard({ steShowButtonUrgence, listeToShow, getResultFi
             shadowOffset: { width: 0, height: 2 },
             shadowRadius: 4,
         };
-        console.log('type clique : ', type);
+
 
         if (type.toLowerCase().includes('hôpital')) {
             return (
@@ -318,7 +191,7 @@ export default function MapCard({ steShowButtonUrgence, listeToShow, getResultFi
                         onPress={() => setFilterType(null)}
                     >
                         <Text style={[styles.filterText, !filterType && styles.filterTextActive]}>
-                            Tous ({healthServices.length})
+                            Tous ({healthServices?.length ?? 0})
                         </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
@@ -459,12 +332,28 @@ export default function MapCard({ steShowButtonUrgence, listeToShow, getResultFi
 
                 {/* Itinéraire réel qui suit les routes */}
                 {routeCoordinates.length > 0 && (
-                    <Polyline
-                        coordinates={routeCoordinates}
-                        strokeColor="#007AFF"
+                    <MapViewDirections
+                        origin={{ latitude: location.latitude, longitude: location.longitude }}
+                        destination={{ latitude: selectedService.latitude, longitude: selectedService.longitude }}
+                        apikey={'AIzaSyA3Yg6ioAiG_ILrMbBpRa7rYPrurFoJjGw'}
                         strokeWidth={5}
-                        lineCap="round"
-                        lineJoin="round"
+                        strokeColor="#007AFF"
+                        mode="DRIVING"
+                        onReady={(result) => {
+                            setRouteCoordinates(result.coordinates);
+                            setDistance(result.distance);
+                            setDuration(result.duration);
+                    
+                            if (mapRef.current) {
+                                mapRef.current.fitToCoordinates(result.coordinates, {
+                                    edgePadding: { top: 100, right: 50, bottom: 300, left: 50 },
+                                    animated: true,
+                                });
+                            }
+                        }}
+                        onError={(errorMessage) => {
+                            console.error('Erreur itinéraire:', errorMessage);
+                        }}
                     />
                 )}
             </MapView>

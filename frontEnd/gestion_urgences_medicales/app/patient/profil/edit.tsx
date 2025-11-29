@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, ActivityIndicator, Platform, Switch, KeyboardAvoidingView, Keyboard } from 'react-native';
 import React, { useState, useEffect } from 'react';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,8 +8,9 @@ import * as yup from 'yup';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import roomPatient from '../../../Routes/routeRoom/roomPatient';
 import LoadingAnimation from '@/components/LoadingAnimation';
+import { patientEditInfo } from '@/Routes/routeService/PatientService';
 
-// Schéma de validation
+// Schéma de validation (inchangé)
 const editProfileSchema = yup.object().shape({
     nom: yup
         .string()
@@ -21,6 +22,11 @@ const editProfileSchema = yup.object().shape({
         .required('Le prénom est obligatoire')
         .min(2, 'Le prénom doit contenir au moins 2 caractères')
         .max(50, 'Le prénom ne peut pas dépasser 50 caractères'),
+    email: yup
+        .string()
+        .required('L\'email est obligatoire')
+        .email('Email invalide')
+        .max(100, 'L\'email ne peut pas dépasser 100 caractères'),
     telephone: yup
         .string()
         .matches(/^[+]?[0-9\s-()]+$/, 'Numéro de téléphone invalide')
@@ -37,6 +43,18 @@ const editProfileSchema = yup.object().shape({
         .string()
         .oneOf(['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', ''], 'Groupe sanguin invalide')
         .nullable(),
+    poids: yup
+        .number()
+        .nullable()
+        .transform((value, originalValue) => originalValue === '' ? null : value)
+        .min(1, 'Le poids doit être supérieur à 0')
+        .max(500, 'Le poids ne peut pas dépasser 500 kg'),
+    taille: yup
+        .number()
+        .nullable()
+        .transform((value, originalValue) => originalValue === '' ? null : value)
+        .min(1, 'La taille doit être supérieure à 0')
+        .max(300, 'La taille ne peut pas dépasser 300 cm'),
 });
 
 type EditProfileFormData = yup.InferType<typeof editProfileSchema>;
@@ -48,6 +66,7 @@ export default function EditProfil() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [dateNaissance, setDateNaissance] = useState<Date | null>(null);
+    const [maladieChronique, setMaladieChronique] = useState(false);
 
     const {
         control,
@@ -58,27 +77,38 @@ export default function EditProfil() {
         resolver: yupResolver(editProfileSchema),
     });
 
+    function parseDateFR(dateStr: string) {
+        const [jour, mois, annee] = dateStr.split('/');
+        return new Date(`${annee}-${mois}-${jour}`);
+    }
+
     useEffect(() => {
         loadPatient();
     }, []);
 
     const loadPatient = async () => {
         try {
-            const patients = await roomPatient.getAllPatients();
+            const patients = await roomPatient.getUserPatient();
+            console.log("\n\n patients dans edit : ", patients);
             if (patients && patients.length > 0) {
                 const p = patients[0];
                 setPatient(p);
                 
-                // Pré-remplir le formulaire
                 setValue('nom', p.nom);
                 setValue('prenom', p.prenom);
+                setValue('email', p.email);
                 setValue('telephone', p.telephone || '');
                 setValue('lieuResidence', p.lieuResidence || '');
                 setValue('numeroUrgence', p.numeroUrgence || '');
                 setValue('groupeSanguin', p.groupeSanguin || '');
+                setValue('poids', p.poids);
+                setValue('taille', p.taille);
+                
+                setMaladieChronique(p.maladieChronique === 1);
                 
                 if (p.dateNaissance) {
-                    setDateNaissance(new Date(p.dateNaissance));
+                    const parsed = parseDateFR(p.dateNaissance);
+                    setDateNaissance(parsed);
                 }
             }
         } catch (error) {
@@ -92,37 +122,84 @@ export default function EditProfil() {
     const onSubmit = async (data: EditProfileFormData) => {
         if (!patient) return;
         
+        const emailChanged = data.email !== patient.email;
+        
+        if (emailChanged) {
+            Alert.alert(
+                'Confirmation',
+                'Vous êtes sur le point de modifier votre email. Vous devrez peut-être vous reconnecter après cette modification. Continuer ?',
+                [
+                    {
+                        text: 'Annuler',
+                        style: 'cancel'
+                    },
+                    {
+                        text: 'Confirmer',
+                        onPress: () => performUpdate(data)
+                    }
+                ]
+            );
+        } else {
+            performUpdate(data);
+        }
+    };
+
+    const performUpdate = async (data: EditProfileFormData) => {
+        // Fermer le clavier avant la mise à jour
+        Keyboard.dismiss();
+        
         setIsSubmitting(true);
         
         try {
             const updateData: any = {
                 nom: data.nom,
                 prenom: data.prenom,
+                email: data.email,
                 telephone: data.telephone || null,
                 lieuResidence: data.lieuResidence || null,
                 numeroUrgence: data.numeroUrgence || null,
                 groupeSanguin: data.groupeSanguin || null,
+                poids: data.poids || null,
+                taille: data.taille || null,
+                maladieChronique: maladieChronique ? 1 : 0,
             };
             
             if (dateNaissance) {
-                updateData.dateNaissance = dateNaissance.toISOString().split('T')[0];
+                const day = String(dateNaissance.getDate()).padStart(2, '0');
+                const month = String(dateNaissance.getMonth() + 1).padStart(2, '0');
+                const year = dateNaissance.getFullYear();
+                updateData.dateNaissance = `${day}/${month}/${year}`;
             }
             
-            await roomPatient.updatePatient(patient.idPatient, updateData);
+            console.log("📤 Données à envoyer:", updateData);
             
-            Alert.alert(
-                'Succès',
-                'Profil mis à jour avec succès',
-                [
-                    {
-                        text: 'OK',
-                        onPress: () => router.back()
-                    }
-                ]
-            );
-        } catch (error) {
+            const response = await patientEditInfo(patient.idPatient, updateData);
+
+            if (response && response.success) {
+                Alert.alert(
+                    'Succès',
+                    'Profil mis à jour avec succès',
+                    [
+                        {
+                            text: 'OK',
+                            onPress: () => router.back()
+                        }
+                    ]
+                );
+            } else {
+                Alert.alert(
+                    'Erreur',
+                    response?.message || "Impossible de mettre à jour le profil. Merci de réessayer."
+                );
+            }
+        } catch (error: any) {
             console.error('Erreur mise à jour:', error);
-            Alert.alert('Erreur', 'Impossible de mettre à jour le profil');
+            
+            if (error?.response?.data?.message?.includes('email')) {
+                Alert.alert('Erreur', 'Cet email est déjà utilisé par un autre compte');
+            } else {
+                Alert.alert('Erreur', 'Impossible de mettre à jour le profil');
+            }
         } finally {
             setIsSubmitting(false);
         }
@@ -159,7 +236,6 @@ export default function EditProfil() {
                     options={{
                         title: "Modifier le profil",
                         headerStyle: { backgroundColor: '#58D68D' },
-
                         headerLeft: () => (
                             <TouchableOpacity onPress={handleCancel}>
                                 <Ionicons name="close" size={24} color="#007AFF" />
@@ -173,7 +249,11 @@ export default function EditProfil() {
     }
 
     return (
-        <View style={styles.container}>
+        <KeyboardAvoidingView 
+            style={styles.container}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+        >
             <Stack.Screen 
                 options={{
                     title: "Modifier le profil",
@@ -201,7 +281,9 @@ export default function EditProfil() {
 
             <ScrollView 
                 style={styles.scrollView}
+                contentContainerStyle={styles.scrollViewContent}
                 showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
             >
                 {/* Section Identité */}
                 <View style={styles.section}>
@@ -225,6 +307,7 @@ export default function EditProfil() {
                                     onChangeText={onChange}
                                     onBlur={onBlur}
                                     maxLength={50}
+                                    returnKeyType="next"
                                 />
                             )}
                         />
@@ -251,6 +334,7 @@ export default function EditProfil() {
                                     onChangeText={onChange}
                                     onBlur={onBlur}
                                     maxLength={50}
+                                    returnKeyType="next"
                                 />
                             )}
                         />
@@ -263,7 +347,10 @@ export default function EditProfil() {
                         <Text style={styles.label}>Date de naissance</Text>
                         <TouchableOpacity
                             style={styles.dateInput}
-                            onPress={() => setShowDatePicker(true)}
+                            onPress={() => {
+                                Keyboard.dismiss();
+                                setShowDatePicker(true);
+                            }}
                         >
                             <Ionicons name="calendar-outline" size={20} color="#666" />
                             <Text style={styles.dateText}>
@@ -275,14 +362,17 @@ export default function EditProfil() {
                         </TouchableOpacity>
                         
                         {showDatePicker && (
-                            <DateTimePicker
-                                value={dateNaissance || new Date()}
-                                mode="date"
-                                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                                onChange={onDateChange}
-                                maximumDate={new Date()}
-                                minimumDate={new Date(1920, 0, 1)}
-                            />
+                            <View style={styles.datePickerContainer}>
+                                <DateTimePicker
+                                    value={dateNaissance || new Date()}
+                                    mode="date"
+                                    themeVariant="dark" 
+                                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                    onChange={onDateChange}
+                                    maximumDate={new Date()}
+                                    minimumDate={new Date(1920, 0, 1)}
+                                />
+                            </View>
                         )}
                     </View>
                 </View>
@@ -290,6 +380,48 @@ export default function EditProfil() {
                 {/* Section Contact */}
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Contact</Text>
+
+                    <View style={styles.formGroup}>
+                        <Text style={styles.label}>
+                            Email <Text style={styles.required}>*</Text>
+                        </Text>
+                        <Controller
+                            control={control}
+                            name="email"
+                            render={({ field: { onChange, onBlur, value } }) => (
+                                <View style={styles.inputWithIcon}>
+                                    <Ionicons name="mail-outline" size={20} color="#666" />
+                                    <TextInput
+                                        style={[
+                                            styles.input,
+                                            styles.inputWithIconText,
+                                            errors.email && styles.inputError
+                                        ]}
+                                        placeholderTextColor="#aaa" 
+                                        placeholder="exemple@email.com"
+                                        value={value}
+                                        onChangeText={onChange}
+                                        onBlur={onBlur}
+                                        keyboardType="email-address"
+                                        autoCapitalize="none"
+                                        autoCorrect={false}
+                                        returnKeyType="next"
+                                    />
+                                </View>
+                            )}
+                        />
+                        {errors.email && (
+                            <Text style={styles.errorText}>{errors.email.message}</Text>
+                        )}
+                        {patient?.email !== control._formValues.email && (
+                            <View style={styles.warningCard}>
+                                <Ionicons name="warning" size={16} color="#FF9500" />
+                                <Text style={styles.warningText}>
+                                    La modification de l'email peut nécessiter une reconnexion
+                                </Text>
+                            </View>
+                        )}
+                    </View>
 
                     <View style={styles.formGroup}>
                         <Text style={styles.label}>Téléphone</Text>
@@ -310,6 +442,7 @@ export default function EditProfil() {
                                         onChangeText={onChange}
                                         onBlur={onBlur}
                                         keyboardType="phone-pad"
+                                        returnKeyType="next"
                                     />
                                 </View>
                             )}
@@ -338,12 +471,84 @@ export default function EditProfil() {
                                         onChangeText={onChange}
                                         onBlur={onBlur}
                                         maxLength={200}
+                                        returnKeyType="next"
                                     />
                                 </View>
                             )}
                         />
                         {errors.lieuResidence && (
                             <Text style={styles.errorText}>{errors.lieuResidence.message}</Text>
+                        )}
+                    </View>
+                </View>
+
+                {/* Section Informations physiques */}
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Informations physiques</Text>
+
+                    <View style={styles.formGroup}>
+                        <Text style={styles.label}>Poids (kg)</Text>
+                        <Controller
+                            control={control}
+                            name="poids"
+                            render={({ field: { onChange, onBlur, value } }) => (
+                                <View style={styles.inputWithIcon}>
+                                    <Ionicons name="fitness-outline" size={20} color="#5856D6" />
+                                    <TextInput
+                                        style={[
+                                            styles.input,
+                                            styles.inputWithIconText,
+                                            errors.poids && styles.inputError
+                                        ]}
+                                        placeholder="Ex: 70"
+                                        value={value?.toString() || ''}
+                                        onChangeText={(text) => {
+                                            const numValue = text.replace(/[^0-9.]/g, '');
+                                            onChange(numValue ? parseFloat(numValue) : null);
+                                        }}
+                                        onBlur={onBlur}
+                                        keyboardType="decimal-pad"
+                                        returnKeyType="next"
+                                    />
+                                    <Text style={styles.unitText}>kg</Text>
+                                </View>
+                            )}
+                        />
+                        {errors.poids && (
+                            <Text style={styles.errorText}>{errors.poids.message}</Text>
+                        )}
+                    </View>
+
+                    <View style={styles.formGroup}>
+                        <Text style={styles.label}>Taille (cm)</Text>
+                        <Controller
+                            control={control}
+                            name="taille"
+                            render={({ field: { onChange, onBlur, value } }) => (
+                                <View style={styles.inputWithIcon}>
+                                    <Ionicons name="resize-outline" size={20} color="#AF52DE" />
+                                    <TextInput
+                                        style={[
+                                            styles.input,
+                                            styles.inputWithIconText,
+                                            errors.taille && styles.inputError
+                                        ]}
+                                        placeholder="Ex: 175"
+                                        value={value?.toString() || ''}
+                                        onChangeText={(text) => {
+                                            const numValue = text.replace(/[^0-9.]/g, '');
+                                            onChange(numValue ? parseFloat(numValue) : null);
+                                        }}
+                                        onBlur={onBlur}
+                                        keyboardType="decimal-pad"
+                                        returnKeyType="done"
+                                    />
+                                    <Text style={styles.unitText}>cm</Text>
+                                </View>
+                            )}
+                        />
+                        {errors.taille && (
+                            <Text style={styles.errorText}>{errors.taille.message}</Text>
                         )}
                     </View>
                 </View>
@@ -366,7 +571,10 @@ export default function EditProfil() {
                                                 styles.bloodTypeButton,
                                                 value === group && styles.bloodTypeButtonActive
                                             ]}
-                                            onPress={() => onChange(group)}
+                                            onPress={() => {
+                                                Keyboard.dismiss();
+                                                onChange(group);
+                                            }}
                                         >
                                             <Text style={[
                                                 styles.bloodTypeText,
@@ -382,6 +590,29 @@ export default function EditProfil() {
                         {errors.groupeSanguin && (
                             <Text style={styles.errorText}>{errors.groupeSanguin.message}</Text>
                         )}
+                    </View>
+
+                    <View style={styles.formGroup}>
+                        <View style={styles.switchContainer}>
+                            <View style={styles.switchContent}>
+                                <Ionicons name="medkit" size={24} color="#FF2D55" />
+                                <View style={styles.switchTextContainer}>
+                                    <Text style={styles.switchLabel}>Maladie chronique</Text>
+                                    <Text style={styles.switchSubtext}>
+                                        Avez-vous une maladie chronique ?
+                                    </Text>
+                                </View>
+                            </View>
+                            <Switch
+                                value={maladieChronique}
+                                onValueChange={(value) => {
+                                    Keyboard.dismiss();
+                                    setMaladieChronique(value);
+                                }}
+                                trackColor={{ false: '#E0E0E0', true: '#34C759' }}
+                                thumbColor={maladieChronique ? '#fff' : '#f4f3f4'}
+                            />
+                        </View>
                     </View>
 
                     <View style={styles.formGroup}>
@@ -403,6 +634,7 @@ export default function EditProfil() {
                                         onChangeText={onChange}
                                         onBlur={onBlur}
                                         keyboardType="phone-pad"
+                                        returnKeyType="done"
                                     />
                                 </View>
                             )}
@@ -416,24 +648,10 @@ export default function EditProfil() {
                     </View>
                 </View>
 
-                {/* Informations non éditables */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Informations du compte</Text>
-                    
-                    <View style={styles.readOnlyCard}>
-                        <View style={styles.readOnlyRow}>
-                            <Text style={styles.readOnlyLabel}>Email</Text>
-                            <Text style={styles.readOnlyValue}>{patient?.email}</Text>
-                        </View>
-                        <Text style={styles.readOnlyHint}>
-                            Pour modifier votre email, contactez le support
-                        </Text>
-                    </View>
-                </View>
-
-                <View style={{ height: 40 }} />
+                {/* Espace supplémentaire en bas pour le clavier */}
+                <View style={styles.bottomSpacer} />
             </ScrollView>
-        </View>
+        </KeyboardAvoidingView>
     );
 }
 
@@ -450,6 +668,9 @@ const styles = StyleSheet.create({
     },
     scrollView: {
         flex: 1,
+    },
+    scrollViewContent: {
+        paddingBottom: 40,
     },
     cancelButton: {
         fontSize: 16,
@@ -515,6 +736,12 @@ const styles = StyleSheet.create({
         marginLeft: 8,
         padding: 14,
     },
+    unitText: {
+        fontSize: 16,
+        color: '#999',
+        fontWeight: '600',
+        marginLeft: 8,
+    },
     errorText: {
         color: '#FF3B30',
         fontSize: 12,
@@ -524,6 +751,23 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#999',
         marginTop: 6,
+        lineHeight: 16,
+    },
+    warningCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        backgroundColor: '#FFF9E6',
+        padding: 12,
+        borderRadius: 8,
+        marginTop: 8,
+        borderLeftWidth: 3,
+        borderLeftColor: '#FF9500',
+    },
+    warningText: {
+        flex: 1,
+        fontSize: 12,
+        color: '#8B6914',
         lineHeight: 16,
     },
     dateInput: {
@@ -539,6 +783,12 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: '#1A1A1A',
         marginLeft: 12,
+    },
+    datePickerContainer: {
+        backgroundColor: 'rgba(161, 151, 149, 0.66)', 
+        padding: 10,
+        borderRadius: 10,
+        marginTop: 8,
     },
     bloodTypeContainer: {
         flexDirection: 'row',
@@ -567,31 +817,36 @@ const styles = StyleSheet.create({
     bloodTypeTextActive: {
         color: '#fff',
     },
-    readOnlyCard: {
-        backgroundColor: '#F8F8F8',
-        padding: 16,
-        borderRadius: 12,
+    switchContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: '#fff',
         borderWidth: 1,
         borderColor: '#E0E0E0',
+        borderRadius: 12,
+        padding: 16,
     },
-    readOnlyRow: {
+    switchContent: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 8,
+        flex: 1,
     },
-    readOnlyLabel: {
-        fontSize: 14,
-        color: '#666',
+    switchTextContainer: {
+        marginLeft: 12,
+        flex: 1,
     },
-    readOnlyValue: {
-        fontSize: 14,
+    switchLabel: {
+        fontSize: 16,
         fontWeight: '600',
         color: '#1A1A1A',
+        marginBottom: 2,
     },
-    readOnlyHint: {
-        fontSize: 12,
-        color: '#999',
-        fontStyle: 'italic',
+    switchSubtext: {
+        fontSize: 13,
+        color: '#666',
+    },
+    bottomSpacer: {
+        height: 100,
     },
 });

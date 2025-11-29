@@ -3,16 +3,26 @@ const router = express.Router();
 const {
     addService,
     updateService,
-    deleteService,
-    getAllServices,
-    getServiceById
+    deleteAccountService,
+    getAllServices_proxy,
+    getServiceById,
+    loginService,
+    logoutService,
+    changePasswordService
 } = require("../controllers/serviceController");
 
 // Créer un service de santé
 router.post("/add", addService);
 
+
+// connexion d' un service de santé
+router.post("/login", loginService);
+
+// connexion d' un service de santé
+router.post("/change_password", changePasswordService);
+
 // Obtenir tous les services
-router.get("/get_all_service_sante", getAllServices);
+router.get("/get_all_service_sante_proxy", getAllServices_proxy);
 
 // Obtenir un service par ID
 router.get("/:idService", getServiceById);
@@ -21,6 +31,9 @@ router.get("/:idService", getServiceById);
 router.patch("/update", updateService);
 
 // Supprimer un service
-router.delete("/delete", deleteService);
+router.delete("/delete", deleteAccountService);
+
+router.post("/logout", logoutService);
 
 module.exports = router;
+

@@ -1,81 +1,4 @@
-// // config/socketConfig.js
-// const socketIO = require("socket.io");
 
-// let io;
-
-// const initializeSocket = (server) => {
-//     // creation d'une instance socket
-//     io = socketIO(server, {
-//         cors: {
-//             origin: "*", // À adapter selon vos besoins
-//             methods: ["GET", "POST", "PUT", "DELETE"]
-//         }
-//     });
-
-//     // Gestion des connexions
-//     io.on("connection", (socket) => {
-//         console.log("✅ Nouveau client connecté :", socket.id);
-
-//         // Gestion de la déconnexion
-//         socket.on("disconnect", () => {
-//             console.log("❌ Client déconnecté :", socket.id);
-//         });
-
-//         // Rejoindre une salle spécifique (pour les urgences par exemple)
-//         socket.on("joinUrgence", (idUrgence) => {
-//             socket.join(`urgence_${idUrgence}`);
-//             console.log(`🔗 Socket ${socket.id} a rejoint la salle urgence_${idUrgence}`);
-//         });
-
-
-//         // rejoindre la salle des urgences en attent qui qui son vue par les service de santer
-        
-//         socket.on("joinServiceSante", () => {
-//             socket.join("services_sante");
-//             console.log(`🏥 Service de santé connecté : ${socket.id} a rejoint la salle 'services_sante'`);
-//         });
-
-
-
-//         socket.on("leaveUrgence", (idUrgence) => {
-//             socket.leave(`urgence_${idUrgence}`);
-//             console.log(`🔓 Socket ${socket.id} a quitté la salle urgence_${idUrgence}`);
-//         });
-//     });
-
-//     console.log("🚀 Socket.IO initialisé avec succès");
-//     return io;
-// };
-
-// const getIO = () => {
-//     if (!io) {
-//         throw new Error("Socket.IO n'est pas initialisé. Appelez initializeSocket() d'abord.");
-//     }
-//     return io;
-// };
-
-// module.exports = { initializeSocket, getIO };
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// config/socketConfig.js
 const socketIO = require("socket.io");
 
 let io;
@@ -85,19 +8,22 @@ const initializeSocket = (server, handlers = {}) => {
     io = socketIO(server, {
         cors: {
             origin: "*",
-            methods: ["GET", "POST", "PUT", "DELETE"]
+            methods: ["GET", "POST", "PUT", "DELETE"],
+            credentials: true
         },
         pingTimeout: 60000,
         pingInterval: 25000
     });
 
-    // Middleware d'authentification (optionnel)
-    io.use((socket, next) => {
-        const token = socket.handshake.auth.token;
-        // TODO: Ajouter validation JWT si nécessaire
-        console.log('🔌 Tentative de connexion:', socket.id);
-        next();
-    });
+    // // Middleware d'authentification (optionnel)
+    // io.use((socket, next) => {
+    //     const token = socket.handshake.auth.token;
+    //     // TODO: Ajouter validation JWT si nécessaire
+    //     console.log('🔌 Tentative de connexion:', socket.id);
+    //     next();
+    // });
+
+
 
     // Gestion des connexions
     io.on("connection", (socket) => {
@@ -105,9 +31,59 @@ const initializeSocket = (server, handlers = {}) => {
 
         // Événement de connexion initiale
         socket.emit('connected', { 
+            message: "Connexion réussie au serveur Socket.IO",
             socketId: socket.id,
             timestamp: new Date().toISOString()
         });
+
+        socket.on("user:typing", ({ idUrgence, isTyping, sender }) => {
+            console.log(`✍️ ${sender} typing dans urgence ${idUrgence}: ${isTyping}`);
+            
+            // Diffuser à tous SAUF l'émetteur
+            socket.to(`urgence_${idUrgence}`).emit("user:typing", {
+                idUrgence,
+                isTyping,
+                sender
+            });
+        });
+
+
+        
+        try {
+            // Handler Urgence
+            if (handlers.urgence && typeof handlers.urgence === 'function') {
+                handlers.urgence(socket);
+                console.log(`   📋 Handler 'urgence' chargé pour ${socket.id}`);
+            }
+
+            // Handler Notification
+            if (handlers.notification && typeof handlers.notification === 'function') {
+                handlers.notification(socket);
+                console.log(`   🔔 Handler 'notification' chargé pour ${socket.id}`);
+            }
+
+            // Handler Message
+            if (handlers.message && typeof handlers.message === 'function') {
+                handlers.message(socket);
+                console.log(`   💬 Handler 'message' chargé pour ${socket.id}`);
+            }
+
+            // Handler Patient
+            if (handlers.patient && typeof handlers.patient === 'function') {
+                handlers.patient(socket);
+                console.log(`   👤 Handler 'patient' chargé pour ${socket.id}`);
+            }
+
+            // Handler Service
+            if (handlers.service && typeof handlers.service === 'function') {
+                handlers.service(socket);
+                console.log(`   🏥 Handler 'service' chargé pour ${socket.id}`);
+            }
+        } catch (error) {
+            console.error(`❌ Erreur lors du chargement des handlers pour ${socket.id}:`, error);
+        }
+
+
 
         // ═══════════════════════════════════════════
         // GESTION DES SALLES (ROOMS)
@@ -148,17 +124,7 @@ const initializeSocket = (server, handlers = {}) => {
             console.log(`🔓 Socket ${socket.id} a quitté service_${serviceId}`);
         });
 
-        // ═══════════════════════════════════════════
-        // INITIALISATION DES HANDLERS MÉTIER
-        // ═══════════════════════════════════════════
-
-        // Appeler tous les handlers passés en paramètre
-        if (handlers.urgence) handlers.urgence(io, socket);
-        if (handlers.notification) handlers.notification(io, socket);
-        if (handlers.message) handlers.message(io, socket);
-        if (handlers.patient) handlers.patient(io, socket);
-        if (handlers.service) handlers.service(io, socket);
-
+    
         // ═══════════════════════════════════════════
         // GESTION DE LA DÉCONNEXION
         // ═══════════════════════════════════════════

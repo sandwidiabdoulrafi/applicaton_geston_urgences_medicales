@@ -8,11 +8,13 @@ const serviceAccountPath = path.resolve(__dirname, "./gestion-urgences-medical-a
 // Initialisation de Firebase
 admin.initializeApp({
     credential: admin.credential.cert(require(serviceAccountPath)),
+    storageBucket: "gestion_urgence_medical.appspot.com" ,
 });
 
 // Initialisation de Firestore
 const db = admin.firestore();
+const bucket = admin.storage().bucket();
 
 console.log("✅ Connexion à Firebase réussie !");
 
-module.exports = { admin, db };
+module.exports = { admin, bucket , db };

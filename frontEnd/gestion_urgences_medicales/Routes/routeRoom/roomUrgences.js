@@ -8,6 +8,7 @@ export async function  initUrgences(){
     }
 
     try {
+
         // Nouvelle API synchrone - plus de transaction/executeSql
         db.execSync(`
             CREATE TABLE IF NOT EXISTS Urgences (
@@ -24,6 +25,7 @@ export async function  initUrgences(){
                 longitude REAL
             );
         `);
+        
         console.log("✅ Table 'Urgences' vérifiée/créée avec succès");
     } catch (error) {
         console.error("❌ Erreur création table:", error);
@@ -89,13 +91,13 @@ export async function getUrgencesByPatient(idPatient) {
 
 // recuperation d'une urgence par id
 
-export async function getUrgenceById(id){
+export async function getUrgenceById(){
     if(!db){
         return Promise.reject("SQLite non disponible");
     }
 
     try{
-        const result = db.getFirstSync(`SELECT * FROM Urgences WHERE id = ?`, [id]);
+        const result = db.getFirstSync(`SELECT * FROM Urgences`);
         console.log("Urgence recuperee avec succee");
         return result;
     }catch(error){
@@ -110,9 +112,9 @@ export async function deleteUrgence(id) {
     if (!db) {
         return Promise.reject('SQLite non disponible');
     }
+    
 
     try {
-        console.log("+-=-=-=-=- ✅ Urgence supprimée :::::  ", id);
         db.runSync(`DELETE FROM Urgences WHERE id = ?`, [id]);
         console.log("✅ Urgence supprimée");
     } catch (error) {
@@ -121,11 +123,52 @@ export async function deleteUrgence(id) {
     }
 }
 
+
+export async function updateUgenceId(newData) {
+    if (!db) {
+        return Promise.reject("SQLite non disponible");
+    }
+
+
+
+    const dataToUpdate = newData.data || newData;
+
+    console.log("✅les donnee recu a l'interieur  la sauvegarde Local : ", newData.data);
+
+    try {
+        db.runSync(
+            `UPDATE Urgences
+                SET 
+                    intitule = ?, 
+                    description = ?, 
+                    priorite = ?
+            WHERE id = ?`,
+            [
+                dataToUpdate.intitule,
+                dataToUpdate.description,
+                dataToUpdate.priorite,
+                dataToUpdate.id
+            ]
+        );
+
+        console.log("✅ Mise à jour locale réussie !");
+
+    } catch (error) {
+        console.error("❌ Erreur mise à jour SQLite:", error);
+        throw error;
+    }
+}
+
+
+
+
+
+
 // Export par défaut pour compatibilité avec les imports existants
 export default {
     initUrgences,
     addNewUgenceLocal,
-    // updateUgenceId,
+    updateUgenceId,
     getUrgencesByPatient,
     deleteUrgence,
     getUrgenceById,

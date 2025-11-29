@@ -16,21 +16,6 @@ export default function Mes_urgences() {
     const [urgencesParStatut, setUrgencesParStatut] = useState([]); 
     const [urgencesAffichees, setUrgencesAffichees] = useState([]); 
 
-    // useEffect(() => {
-    //     const fetchUrgences = async () => {
-    //         setIsLoad(true);
-    //         try {
-    //             const idPatient = 1;
-    //             const userUrgence = await RoutesRoom.getUrgencesByPatient(idPatient);
-    //             setUrgences(userUrgence);
-    //         } catch (error) {
-    //             console.log("Erreur lors de la récupération des urgences :", error);
-    //         } finally {
-    //             setIsLoad(false);
-    //         }
-    //     };
-    //     fetchUrgences();
-    // }, []);
 
     useFocusEffect(
         useCallback(() => {

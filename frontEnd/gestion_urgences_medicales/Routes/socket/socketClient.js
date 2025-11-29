@@ -1,27 +1,28 @@
-import { io } from "socket.io-client";
+import { io, Socket } from 'socket.io-client';
 
-const SOCKET_URL = "http://192.168.1.132:5000";
+// ⚠️ Remplacez par l'URL de votre backend
+const SOCKET_URL = 'http://192.168.1.132:5000';
 
-export const socket = io(SOCKET_URL, {
-    transports: ['websocket', 'polling'],
+const socket = io(SOCKET_URL, {
+    autoConnect: false, 
     reconnection: true,
     reconnectionAttempts: 5,
     reconnectionDelay: 1000,
+    timeout: 10000,
+    transports: ['websocket', 'polling']
 });
 
-// Connexion réussie
-socket.on("connect", () => {
-    console.log("✅ Socket connecté :", socket.id);
+// Logs de débogage
+socket.on('connect', () => {
+    console.log('✅ Socket connecté:', socket.id);
 });
 
-// Erreur de connexion
-socket.on("connect_error", (error) => {
-    console.error("❌ Erreur Socket :", error.message);
+socket.on('connect_error', (error) => {
+    console.error('❌ Erreur de connexion Socket:', error.message);
 });
 
-// Déconnexion
-socket.on("disconnect", (reason) => {
-    console.log("🔴 Socket déconnecté :", reason);
+socket.on('disconnect', (reason) => {
+    console.log('🔴 Socket déconnecté:', reason);
 });
 
 export default socket;

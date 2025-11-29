@@ -2,8 +2,12 @@ import { Tabs } from "expo-router";
 import React from "react";
 import { Platform, Text } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
 
 export default function PatientLayout() {
+    const insets = useSafeAreaInsets();
+
     return (
         <Tabs
             screenOptions={{
@@ -19,8 +23,8 @@ export default function PatientLayout() {
                 },
                 tabBarStyle: {
                     backgroundColor: "#58D68D",
-                    height: Platform.OS === "ios" ? 90 : 60,
-                    paddingBottom: Platform.OS === "ios" ? 30 : 10,
+                    height: Platform.OS === "ios" ? 90 : 60 + insets.bottom,
+                    paddingBottom: Platform.OS === "ios" ? 30 : 10 + insets.bottom,
                     paddingTop: 10,
                     borderTopWidth: 0,
                     elevation: 10,
@@ -78,7 +82,7 @@ export default function PatientLayout() {
                         color={focused ? "#2E86C1" : "#FFFFFF"}
                         />
                     ),
-                    tabBarBadge: 2,
+                    // tabBarBadge: 2,
                 }}
             />
 

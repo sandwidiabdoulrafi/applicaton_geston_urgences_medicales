@@ -25,3 +25,7 @@ export async function initNotifications() {
         console.error("❌ Erreur création table Notifications:", error);
     }
 }
+
+
+
+

@@ -4,34 +4,6 @@ const { getIO } = require("../config/socketConfig");
 const { db } = require("../config/firebaseConfig");
 
 module.exports = (socket) => {
-    // 🆕 Créer une nouvelle urgence
-    // socket.on("createUrgence", async (data) => {
-    //     console.log("🚑 Nouvelle urgence reçue :", data);
-
-    //     try {
-    //         const idUrgence = uuidv4();
-    //         const newUrgence = {
-    //             idUrgence,
-    //             ...data,
-    //             statut: "en_attente",
-    //             dateCreation: new Date().toISOString(),
-    //         };
-
-    //         // 🔹 Enregistrement dans Firebase
-    //         await db.collection("urgences").doc(idUrgence).set(newUrgence);
-
-    //         // 🔥 Notifier tous les services de santé
-    //         const io = getIO();
-    //         io.to("services_sante").emit("urgenceCreated", newUrgence);
-
-    //         // ✅ Confirmer au patient
-    //         socket.emit("urgenceCreatedSuccess", newUrgence);
-    //         console.log("✅ Urgence créée avec succès :", newUrgence);
-    //     } catch (error) {
-    //         console.error("❌ Erreur lors de la création de l'urgence :", error);
-    //         socket.emit("urgenceCreatedError", error.message);
-    //     }
-    // });
 
     // 🗑️ Supprimer une urgence
     socket.on("deleteUrgence", async ({ idUrgence, idPatient }) => {
@@ -113,79 +85,184 @@ module.exports = (socket) => {
         }
     });
 
-    // 🏥 Service intervient sur une urgence
-    socket.on("serviceIntervient", async ({ idUrgence, idService }) => {
-        console.log("🚑 [SOCKET] Service intervient sur l'urgence :", idUrgence, "service :", idService);
 
-        try {
-            const urgenceDoc = await db.collection("urgences").doc(idUrgence).get();
-            if (!urgenceDoc.exists) {
-                return socket.emit("serviceIntervientError", { success: false, message: "Urgence introuvable" });
-            }
 
-            const urgenceData = urgenceDoc.data();
-            if (urgenceData.statut === "en_cours" || urgenceData.statut === "terminee") {
-                return socket.emit("serviceIntervientError", { success: false, message: "Urgence déjà prise en charge ou terminée" });
-            }
 
-            const serviceDoc = await db.collection("services").doc(idService).get();
-            if (!serviceDoc.exists) {
-                return socket.emit("serviceIntervientError", { success: false, message: "Service introuvable" });
-            }
 
-            const serviceData = serviceDoc.data();
 
-            const updateData = {
-                idAssistant: idService,
-                statut: "en_cours",
-                dateIntervention: new Date().toISOString(),
-            };
 
-            await db.collection("urgences").doc(idUrgence).update(updateData);
-            console.log("✅ [SOCKET] Service a pris en charge l'urgence :", idUrgence);
 
-            const io = getIO();
-            const resultData = {
-                idUrgence,
-                idService,
-                ...updateData,
-                serviceInfo: {
-                    id: idService,
-                    nomEtablissement: serviceData.nomEtablissement,
-                    typeEtablissement: serviceData.typeEtablissement,
-                    telephone: serviceData.telephone,
-                    adresse: serviceData.adresse,
-                    ville: serviceData.ville,
-                    heureOuverture: serviceData.heureOuverture,
-                    heureFermeture: serviceData.heureFermeture,
-                    description: serviceData.description,
-                    photoProfil: serviceData.photoProfil,
-                    latitude: serviceData.latitude,
-                    longitude: serviceData.longitude,
-                },
-            };
 
-            io.to(`urgence_${idUrgence}`).emit("urgenceStatusChanged", resultData);
-            io.to("services_sante").emit("urgenceRemoved", { idUrgence });
 
-            // 🔔 Créer et envoyer notification au patient
-            const notification = {
-                idPatient: urgenceData.idPatient,
-                idUrgence,
-                type: "intervention",
-                titre: "Urgence prise en charge",
-                message: `Votre urgence a été prise en charge par ${serviceData.nomEtablissement}`,
-                timestamp: new Date().toISOString(),
-                isRead: false,
-            };
 
-            await db.collection("notifications").add(notification);
-            io.to(`urgence_${idUrgence}`).emit("notificationNew", notification);
 
-            console.log("📡 [SOCKET] Intervention notifiée patient + service, urgence retirée de la liste globale");
-        } catch (error) {
-            console.error("❌ [SOCKET] Erreur lors de l'intervention :", error);
-            socket.emit("serviceIntervientError", { success: false, message: error.message });
+// 🏥 Service intervient sur une urgence - VERSION OPTIMISÉE
+socket.on("serviceIntervient", async ({ idUrgence, idService }) => {
+    console.log(`🚑 Service ${idService} intervient sur urgence ${idUrgence}`);
+
+    try {
+        // 1️⃣ Récupérer l'urgence
+        const urgenceQuery = await db
+            .collection("urgences")
+            .where("idUrgence", "==", idUrgence)
+            .limit(1)
+            .get();
+
+        if (urgenceQuery.empty) {
+            return socket.emit("serviceIntervientError", { 
+                success: false, 
+                message: "Urgence introuvable" 
+            });
         }
-    });
+
+        const urgenceDoc = urgenceQuery.docs[0];
+        const urgenceData = urgenceDoc.data();
+
+        // 2️⃣ Vérifier le statut
+        if (["en_cours", "terminee"].includes(urgenceData.statut)) {
+            return socket.emit("serviceIntervientError", { 
+                success: false, 
+                message: "Urgence déjà prise en charge ou terminée" 
+            });
+        }
+
+        // 3️⃣ Récupérer le service de santé
+        const serviceQuery = await db
+            .collection("servicesSantes")
+            .where("idService", "==", idService)
+            .select(
+                "idService", "nomEtablissement", "email", "telephone",
+                "typeEtablissement", "adresse", "ville", "latitude", 
+                "longitude", "heureOuverture", "heureFermeture", 
+                "ouvert24h", "description", "photoProfil", "isActive"
+            )
+            .limit(1)
+            .get();
+
+        if (serviceQuery.empty) {
+            return socket.emit("serviceIntervientError", { 
+                success: false, 
+                message: "Service introuvable" 
+            });
+        }
+
+        const serviceData = serviceQuery.docs[0].data();
+
+        // 4️⃣ Récupérer les infos du patient (AVANT la mise à jour)
+        const patientQuery = await db
+            .collection("patients")
+            .where("idPatient", "==", urgenceData.idPatient)
+            .select(
+                "idPatient","dateNaissance", "email", "groupeSanguin", "lieuResidence",
+                "maladieChronique", "nom", "numeroUrgence", "photoProfil",
+                "poids", "prenom", "role", "taille", "telephone"
+            )
+            .limit(1)
+            .get();
+
+        if (patientQuery.empty) {
+            console.warn(`⚠️ Patient ${urgenceData.idPatient} introuvable`);
+            // Continuer quand même, mais avec infos limitées
+        }
+
+        const patientData = patientQuery.empty ? null : patientQuery.docs[0].data();
+
+        // 5️⃣ Mettre à jour l'urgence en base
+        const now = new Date().toISOString();
+        const updateData = {
+            idAssistant: idService,
+            statut: "en_cours",
+            dateIntervention: now,
+        };
+
+        await db.collection("urgences").doc(urgenceDoc.id).update(updateData);
+
+        // 6️⃣ Préparer les données complètes
+        const io = getIO();
+        const interventionData = {
+            idUrgence,
+            idService,
+            ...updateData,
+            serviceInfo: serviceData,
+        };
+
+        // 7️⃣ Créer la notification
+        const notification = {
+            idPatient: urgenceData.idPatient,
+            idUrgence,
+            type: "intervention",
+            titre: "Urgence prise en charge",
+            message: `Votre urgence a été prise en charge par ${serviceData.nomEtablissement}`,
+            timestamp: now,
+            isRead: false,
+        };
+
+        await db.collection("notifications").add(notification);
+
+
+        // ═══════════════════════════════════════════════════════════
+        // ÉMISSIONS ORGANISÉES PAR DESTINATION
+        // ═══════════════════════════════════════════════════════════
+
+        // 1️⃣ Pour la page index.tsx (liste d'attente)
+        // → Retirer l'urgence de la liste
+        io.to(`service_${idService}`).emit("removeUrgenceFromList", idUrgence);
+        console.log(`📤 removeUrgenceFromList → service_${idService} : ${idUrgence}`);
+
+        // 2️⃣ Pour le modal DetailUrgence.jsx
+        // → Confirmer la prise en charge et fermer le modal
+        io.to(`service_${idService}`).emit("succesAdd", idUrgence);
+        console.log(`📤 succesAdd → service_${idService} : ${idUrgence}`);
+
+        // 3️⃣ Pour le Layout (ServiceUrgenceLayout.tsx)
+        // → Sauvegarder l'urgence comme "urgence en cours"
+        io.to(`service_${idService}`).emit("urgenceStatusChanged", updateData);
+        console.log(`📤 urgenceStatusChanged → service_${idService}`);
+
+        // 4️⃣ Informations du patient pour le service
+        if (patientData) {
+            io.to(`service_${idService}`).emit("patientInfoForService", patientData);
+        }
+
+        // Envoyer au patient 
+
+        io.to(`patient_${interventionData.idPatient}`).emit("urgenceAccepteByService", interventionData);
+        console.log(`📤 urgenceAccepteByService → patient_${interventionData.idPatient}`);
+
+        // 5️⃣ Retirer de la room globale des services disponibles
+        io.to("services_sante").emit("urgenceRemoved", { idUrgence });
+
+
+
+        console.log(`✅ Intervention réussie: ${idService} → ${idUrgence}`);
+
+    } catch (error) {
+        console.error("❌ Erreur intervention:", error.message);
+        socket.emit("serviceIntervientError", { 
+            success: false, 
+            message: error.message 
+        });
+    }
+});
+
+// // 📌 Note : Assurez-vous que le service s'abonne à sa room lors de la connexion
+// socket.on("serviceConnected", ({ idService }) => {
+//     socket.join(`service_${idService}`);
+//     console.log(`✅ Service ${idService} connecté à sa room`);
+// });
+    
 };
+
+
+
+
+
+
+
+
+
+
+
+
+
+

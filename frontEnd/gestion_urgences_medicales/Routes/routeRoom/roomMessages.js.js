@@ -70,11 +70,10 @@ function validateMessageType(type) {
 }
 
 /**
- * Récupère les urgences avec discussions (SÉCURISÉ)
+ * Récupère uniquement les urgences qui ont au moins une discussion
  */
-async function getUrgencesAvecDiscussions() {
+export async function getUrgencesAvecDiscussions() {
     try {
-        // Utilisation de requête préparée implicite via getAllSync
         const result = db.getAllSync(`
             SELECT 
                 U.id AS idUrgence,
@@ -90,17 +89,22 @@ async function getUrgencesAvecDiscussions() {
                 S.email,
                 MAX(M.timestamp) AS dernierMessage
             FROM Urgences U
-            JOIN Messages M ON U.id = M.idUrgence
+            INNER JOIN Messages M ON U.id = M.idUrgence
             LEFT JOIN ServiceSante S ON U.idAssistant = S.idAssistant
-            GROUP BY U.id
+            GROUP BY U.id, U.intitule, U.description, U.statut, U.priorite, 
+                     U.idAssistant, U.idPatient,
+                     S.nomEtablissement, S.typeEtablissement, S.telephone, S.email
             ORDER BY dernierMessage DESC;
         `);
+
+        console.log(`✅ ${result.length} urgence(s) avec discussion(s) récupérée(s)`);
         return result || [];
     } catch (error) {
         console.error("❌ Erreur lors de la récupération des urgences:", error);
         return [];
     }
 }
+
 
 /**
  * Récupère les messages d'une urgence (SÉCURISÉ avec paramètres bindés)
@@ -235,3 +239,6 @@ export default {
     validateMessageText,
     validateMessageType
 };
+
+
+

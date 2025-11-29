@@ -1,7 +1,7 @@
 
 import { View, Text, Alert, TouchableOpacity, StyleSheet, ScrollView } from 'react-native'
-import React, { useEffect, useState } from 'react'
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
+import React, { useCallback, useEffect, useState } from 'react'
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
 import UrgenceDetail from '@/types/UrgenceDetail';
 import roomUrgences from '@/Routes/routeRoom/roomUrgences';
 import LoadingAnimation from '@/components/LoadingAnimation';
@@ -17,9 +17,17 @@ export default function UrgenceDetailPage() {
     const [urgence, setUrgence] = useState<UrgenceDetail | null>(null);
     const [loading, setLoading] = useState(true);
 
-    useEffect(()=>{
-        loadUrgenceDetails();
-    },[id])
+
+
+
+        useFocusEffect(
+            useCallback(() => {
+                loadUrgenceDetails();
+                
+            }, [])
+        );
+    
+    
 
     const loadUrgenceDetails = async()=>{
         try{
@@ -178,25 +186,39 @@ export default function UrgenceDetailPage() {
             }
         })
     }
+    const handleEdit = ()=>{
+        router.push({
+            pathname:'/patient/urgences/edit',
+            params:{
+                id:urgence.id,
+            }
+        })
+    }
 
 
     return (
         <View style={styles.container}>
 
             <Stack.Screen
-            options={{
-                title: "Détails de l'urgence",
-                headerStyle: { backgroundColor: '#58D68D' },
-                headerTintColor: '#fff',                    
-                headerTitleStyle: { fontWeight: 'bold' },
+                options={{
+                    title: "Détails de l'urgence",
+                    headerStyle: { backgroundColor: '#58D68D' },
+                    headerTintColor: '#fff',                    
+                    headerTitleStyle: { fontWeight: 'bold' },
 
-                headerLeft: ()=>(
-                    <TouchableOpacity onPress={() => router.back()} style={{ marginLeft: 2 }}>
-                        <Ionicons name="arrow-back" size={34} color="#fff" />
-                    </TouchableOpacity>
-                )
-            }}
-/>
+                    headerLeft: ()=>(
+                        <TouchableOpacity onPress={() => router.back()} style={{ marginLeft: 2 }}>
+                            <Ionicons name="arrow-back" size={34} color="#fff" />
+                        </TouchableOpacity>
+                    ),
+
+                    headerRight: ()=>(
+                        <TouchableOpacity onPress={() => handleEdit()}>
+                            <Ionicons name="create" size={34} color="#fff" />
+                        </TouchableOpacity>
+                    )
+                }}
+            />
 
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>

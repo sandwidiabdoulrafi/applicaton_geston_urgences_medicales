@@ -19,11 +19,6 @@ loadIdPatient();
 const createUrgence = async (dataForm) => {
 
     
-    
-    console.log("🟢 Données reçues pour création d'une urgence :", {
-        idPatient,
-        ...dataForm,
-    });
 
     try {
         // Étape 1 : envoyer au backend
@@ -32,8 +27,7 @@ const createUrgence = async (dataForm) => {
             ...dataForm,
         });
 
-        console.log("\n\n\n✅ _-_-_-__-_-_-_-_-_-_-_-_ Réponse backend :", response.data);
-
+       
         // Étape 2 : sauvegarder localement dans Room
 
         const urgenceData = response.data?.data; // 🔹 seulement "data"
@@ -45,7 +39,7 @@ const createUrgence = async (dataForm) => {
             });
         }
 
-        // console.log("📦 Urgence enregistrée localement !");
+        
         return { success: true, data: response.data };
     } catch (error) {
         console.error("❌ Erreur lors de la création de l'urgence :", error.message);
@@ -65,16 +59,17 @@ const createUrgence = async (dataForm) => {
 // -------------------- METTRE À JOUR UNE URGENCE --------------------
 
 const updateUrgence = async (data) => {
-    console.log("🟡 Mise à jour d'une urgence :", data);
 
     try {
         // Étape 1 : mise à jour backend
-        await routesFunction.updateUrgence(data);
+        const response = await routesFunction.updateUrgence(data);
 
+
+        console.log("✅ =====================================================================\n\n\n\n\n\n\n  avant la sauvegarde Local : ", response.data);
         // Étape 2 : mise à jour locale
-        await roomUrgences.updateUgenceId(idPatient, data);
+        await roomUrgences.updateUgenceId(response.data);
 
-        console.log("✅ Urgence mise à jour avec succès !");
+        
         return { success: true };
     } catch (error) {
         console.error("❌ Erreur lors de la mise à jour :", error.message);

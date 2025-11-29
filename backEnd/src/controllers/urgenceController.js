@@ -1,142 +1,3 @@
-// const { db } = require("../config/firebaseConfig");
-
-// // ➕ Ajouter une urgence
-// const addUrgence = async (req, res) => {
-//     console.log("🟢 Données reçues du front :", req.body);
-
-//     try {
-//         const { idUrgence, idPatient, idAssistant, intitule, description, statut, priorite, latitude, longitude } = req.body;
-
-//         // Vérification des champs obligatoires
-//         if (!idUrgence || !idPatient || !intitule || !latitude || !longitude) {
-//             return res.status(400).json({
-//                 success: false,
-//                 message: "Champs obligatoires manquants (idUrgence, idPatient, intitule, latitude, longitude)"
-//             });
-//         }
-
-//         const newUrgence = {
-//             idUrgence,
-//             idPatient,
-//             idAssistant: idAssistant || null,
-//             intitule,
-//             description: description || "",
-//             dateCreation: new Date().toISOString(),
-//             statut: statut || "en attente",
-//             priorite: priorite || "normale",
-//             latitude,
-//             longitude
-//         };
-
-//         // Enregistrement dans Firestore
-//         const docRef = await db.collection("urgences").add(newUrgence);
-//         console.log("✅ Nouvelle urgence ajoutée avec ID Firestore :", docRef.id);
-
-//         res.status(201).json({
-//             success: true,
-//             message: "Urgence ajoutée avec succès",
-//             data: { firestoreId: docRef.id, ...newUrgence }
-//         });
-
-//     } catch (error) {
-//         console.error("❌ Erreur lors de l'ajout de l'urgence :", error);
-//         res.status(500).json({
-//             success: false,
-//             message: "Erreur lors de l'ajout de l'urgence",
-//             error: error.message
-//         });
-//     }
-// };
-
-// // ❌ Supprimer une urgence
-// const deleteUrgence = async (req, res) => {
-//     try {
-//         const { id } = req.body;
-
-//         if (!id) return res.status(400).json({ success: false, message: "ID manquant pour la suppression" });
-
-//         await db.collection("urgences").doc(id).delete();
-//         res.status(200).json({ success: true, message: "Urgence supprimée avec succès" });
-
-//     } catch (error) {
-//         console.error("❌ Erreur lors de la suppression :", error);
-//         res.status(500).json({ success: false, message: "Erreur lors de la suppression", error: error.message });
-//     }
-// };
-
-// // 🔄 Mettre à jour une urgence
-// const updateUrgence = async (req, res) => {
-//     try {
-//         const { id, ...data } = req.body;
-
-//         if (!id) return res.status(400).json({ success: false, message: "ID manquant pour la mise à jour" });
-
-//         await db.collection("urgences").doc(id).update(data);
-//         res.status(200).json({ success: true, message: "Urgence mise à jour avec succès" });
-
-//     } catch (error) {
-//         console.error("❌ Erreur lors de la mise à jour :", error);
-//         res.status(500).json({ success: false, message: "Erreur lors de la mise à jour", error: error.message });
-//     }
-// };
-
-// // 📋 Récupérer toutes les urgences de l'utilisateur 
-// const getAllUrgence = async (req, res) => {
-//     try {
-//         const snapshot = await db.collection("urgences").get();
-//         const urgences = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-//         res.status(200).json({
-//             success: true,
-//             message: "Urgences récupérées avec succès",
-//             data: urgences
-//         });
-
-//     } catch (error) {
-//         console.error("❌ Erreur lors de la récupération :", error);
-//         res.status(500).json({
-//             success: false,
-//             message: "Erreur lors de la récupération des urgences",
-//             error: error.message
-//         });
-//     }
-// };
-
-// module.exports = { addUrgence, deleteUrgence, updateUrgence, getAllUrgence };
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 const { db } = require("../config/firebaseConfig");
 const { getIO } = require("../config/socketConfig");
@@ -183,6 +44,7 @@ const addUrgence = async (req, res) => {
         // Enregistrement dans Firestore
         const docRef = await db.collection("urgences").add(newUrgence);
         console.log("✅ [http] Nouvelle urgence ajoutée avec ID Firestore :", docRef.id);
+        console.log("\n\n\n\n -=-=-==-=-=-=-=-==-=-=-==-= [http] Nouvelle urgence donner de l'urgence :", newUrgence);
 
         const result = {
             success: true,
@@ -292,43 +154,55 @@ const updateUrgence = async (req, res) => {
     console.log("🔵 [http] Demande de mise à jour :", req.body);
 
     try {
-        const { id, idPatient, ...data } = req.body;
+        const { idUrgence, idPatient, ...data } = req.body;
 
-        if (!id || !idPatient) {
+        console.log(`Urgence id : ${idUrgence } idPatient : ${idPatient}\n\n\n`);
+
+        if (!idUrgence || !idPatient) {
             const error = { success: false, message: "ID urgence ou ID patient manquant" };
             console.log("❌ [http] Validation échouée :", error.message);
             return res.status(400).json(error);
         }
 
         // Récupérer l'urgence
-        const urgenceDoc = await db.collection("urgences").doc(id).get();
+        const urgencesQuery = await db.collection("urgences")
+            .where("idUrgence", "==", idUrgence)
+            .where("idPatient", "==", idPatient)
+            .get();
 
-        if (!urgenceDoc.exists) {
+            console.log(`urgencesQuery : ${urgencesQuery } \n\n\n`);
+
+        if (urgencesQuery.empty) {
             const error = { success: false, message: "Urgence non trouvée" };
             return res.status(404).json(error);
         }
 
+        const urgenceDoc = urgencesQuery.docs[0]; 
         const urgenceData = urgenceDoc.data();
 
         // Vérifier que le patient est bien le propriétaire
         if (urgenceData.idPatient !== idPatient) {
             return res.status(403).json({ success: false, message: "Vous ne pouvez mettre à jour que vos urgences" });
         }
-
+        
         // Mettre à jour l'urgence
-        await db.collection("urgences").doc(id).update(data);
-        console.log("✅ [http] Urgence mise à jour :", id);
+        await db.collection("urgences").doc(urgenceDoc.id).update(data);
 
-        const result = { success: true, message: "Urgence mise à jour avec succès", data: { id, ...data } };
+
+        console.log("✅ [http] Urgence mise à jour :", idUrgence);
+
+
+        
+        const result = { success: true, message: "Urgence mise à jour avec succès", data: { idUrgence, ...data } };
         const io = getIO();
 
         // 🔹 Notifier uniquement le patient + service assigné
-        io.to(`urgence_${id}`).emit("urgence:updated", { id, ...data });
+        io.to(`urgence_${idUrgence}`).emit("urgence:updated", { idUrgence, ...data });
 
         // 🔹 Si le statut change et que l'urgence passe en cours, la retirer de la liste globale
         if (data.statut === "en_cours") {
-            io.to("services").emit("urgence:removed", { id });
-            console.log(`📡 Urgence ${id} retirée de la liste globale des services`);
+            io.to("services").emit("urgence:removed", { idUrgence });
+            console.log(`📡 Urgence ${idUrgence} retirée de la liste globale des services`);
         }
 
         res.status(200).json(result);
@@ -493,7 +367,13 @@ const serviceIntervient = async (req, res) => {
 // 📋 Récupérer toutes les urgences de l'utilisateur 
 const getAllUrgence = async (req, res) => {
     try {
-        const snapshot = await db.collection("urgences").get();
+
+        const snapshot = await db
+            .collection("urgences")
+            .where("statut", "==", "en_attente")
+            .get();
+
+
         const urgences = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
         res.status(200).json({
@@ -511,6 +391,9 @@ const getAllUrgence = async (req, res) => {
         });
     }
 };
+
+
+
 
 
 

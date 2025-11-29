@@ -1,7 +1,9 @@
-import { TouchableOpacity, View, Text, Image, StyleSheet } from 'react-native';
+
+import { TouchableOpacity, View, Text, Image, StyleSheet, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { memo, useCallback, useMemo } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import Message from '../types/Message';
+import LoadingAnimation from './LoadingAnimation';
 
 interface RenderMessageProps {
     item: Message;
@@ -12,24 +14,22 @@ interface RenderMessageProps {
     setPreviewUri: (uri: string) => void;
 }
 
-function RenderMessage({
-    item,
-    selectedMessage,
-    setShowImagePreview,
-    setSelectedMessage,
-    setShowDeleteModal,
-    setPreviewUri
-}: RenderMessageProps) {
+function RenderMessage({ item, selectedMessage, setShowImagePreview, setSelectedMessage, setShowDeleteModal, setPreviewUri }: RenderMessageProps) {
+
+    console.log("item : ", item)
+
     const isPatient = item.sender === 'patient';
     const isSelected = selectedMessage === item.idMessage;
+    const [isImageLoading, setIsImageLoading] = useState(true);
 
-    // 📌 Mémoisation des fonctions de formatage
-    const formatTime = useCallback((timestamp: string): string => {
-        const date = new Date(timestamp);
+    // 📌 Mémoisation des fonctions de formatage (DÉPLACÉES HORS DU COMPOSANT)
+    // Ces fonctions ne changent jamais, donc on peut les extraire
+    const formatTime = useMemo(() => {
+        const date = new Date(item.timestamp);
         const hours = date.getHours();
         const minutes = date.getMinutes().toString().padStart(2, '0');
         return `${hours}:${minutes}`;
-    }, []);
+    }, [item.timestamp]);
 
     const formatFileSize = useCallback((bytes: number): string => {
         if (bytes < 1024) return `${bytes} B`;
@@ -43,14 +43,14 @@ function RenderMessage({
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     }, []);
 
-    const getStatusIcon = useCallback((status: string): keyof typeof Ionicons.glyphMap => {
-        switch (status) {
+    const statusIcon = useMemo(() => {
+        switch (item.status) {
             case 'envoye': return 'checkmark-done';
             case 'lu': return 'checkmark-done-circle';
             case 'erreur': return 'alert-circle';
             default: return 'time-outline';
         }
-    }, []);
+    }, [item.status]);
 
     // 📌 Handlers mémorisés
     const handleLongPress = useCallback(() => {
@@ -67,15 +67,11 @@ function RenderMessage({
         }
     }, [item.uri, setPreviewUri, setShowImagePreview]);
 
-    // 📌 Valeurs calculées mémorisées
-    const formattedTime = useMemo(() => formatTime(item.timestamp), [formatTime, item.timestamp]);
-    const statusIcon = useMemo(() => getStatusIcon(item.status), [getStatusIcon, item.status]);
-
-    // 📌 Composants de contenu
-    const renderMessageFooter = useCallback(() => (
+    // 📌 Composant Footer (commun à tous les messages)
+    const MessageFooter = useMemo(() => (
         <View style={styles.messageFooter}>
             <Text style={[styles.messageTime, isPatient && styles.messageTimePatient]}>
-                {formattedTime}
+                {formatTime}
             </Text>
             {isPatient && (
                 <Ionicons
@@ -86,35 +82,54 @@ function RenderMessage({
                 />
             )}
         </View>
-    ), [formattedTime, isPatient, statusIcon]);
+    ), [formatTime, isPatient, statusIcon]);
 
-    const renderTextMessage = useCallback(() => (
+    // 📌 RENDU PAR TYPE DE MESSAGE
+    const renderTextMessage = useMemo(() => (
         <View style={[styles.messageBubble, isPatient ? styles.bubblePatient : styles.bubbleAssistant]}>
             <Text style={[styles.messageText, isPatient ? styles.textPatient : styles.textAssistant]}>
                 {item.text}
             </Text>
-            {renderMessageFooter()}
+            {MessageFooter}
         </View>
-    ), [item.text, isPatient, renderMessageFooter]);
+    ), [item.text, isPatient, MessageFooter]);
 
-    const renderImageMessage = useCallback(() => (
-        <TouchableOpacity
+    const renderImageMessage = useMemo(() => (
+        <View
             style={styles.mediaContainer}
-            onPress={handleImagePress}
-            activeOpacity={0.9}
         >
+                {isImageLoading && (
+                    <View style={[styles.imageMessage, styles.loadingOverlay]}>
+                        <ActivityIndicator />
+                    </View>
+                )}
             <Image
-                source={{ uri: item.uri }}
+            source={{ uri: `http://192.168.100.25:8081/${item.mediaUrl}`}}
                 style={styles.imageMessage}
                 resizeMode="cover"
+                // ⚡ Optimisation de chargement
+                
+                onLoadStart={() => setIsImageLoading(true)}
+                onLoadEnd={() => setIsImageLoading(false)}
+                defaultSource={require('../assets/images/placeholderImage.png')} // Image par défaut
             />
-            <Text style={[styles.messageTime, styles.mediaTime]}>
-                {formattedTime}
-            </Text>
-        </TouchableOpacity>
-    ), [item.uri, handleImagePress, formattedTime]);
+            <View style={styles.mediaTimeContainer}>
+                <Text style={styles.mediaTime}>
+                    {formatTime}
+                </Text>
+                {isPatient && (
+                    <Ionicons
+                        name={statusIcon}
+                        size={12}
+                        color="#fff"
+                        style={{ marginLeft: 4 }}
+                    />
+                )}
+            </View>
+        </View>
+    ), [item.uri, handleImagePress, formatTime, isPatient, statusIcon]);
 
-    const renderVideoMessage = useCallback(() => (
+    const renderVideoMessage = useMemo(() => (
         <View style={styles.mediaContainer}>
             <View style={styles.videoPlaceholder}>
                 <Ionicons name="play-circle" size={48} color="#fff" />
@@ -122,13 +137,15 @@ function RenderMessage({
                     {item.duration ? formatDuration(Math.floor(item.duration / 1000)) : 'Vidéo'}
                 </Text>
             </View>
-            <Text style={[styles.messageTime, styles.mediaTime]}>
-                {formattedTime}
-            </Text>
+            <View style={styles.mediaTimeContainer}>
+                <Text style={styles.mediaTime}>
+                    {formatTime}
+                </Text>
+            </View>
         </View>
-    ), [item.duration, formatDuration, formattedTime]);
+    ), [item.duration, formatDuration, formatTime]);
 
-    const renderDocumentMessage = useCallback(() => (
+    const renderDocumentMessage = useMemo(() => (
         <View style={[
             styles.messageBubble,
             styles.documentBubble,
@@ -154,14 +171,12 @@ function RenderMessage({
                         {formatFileSize(item.fileSize)}
                     </Text>
                 )}
-                <Text style={[styles.messageTime, isPatient && styles.messageTimePatient]}>
-                    {formattedTime}
-                </Text>
             </View>
+            {MessageFooter}
         </View>
-    ), [item.fileName, item.fileSize, isPatient, formatFileSize, formattedTime]);
+    ), [item.fileName, item.fileSize, isPatient, formatFileSize, MessageFooter]);
 
-    const renderAudioMessage = useCallback(() => (
+    const renderAudioMessage = useMemo(() => (
         <View style={[
             styles.messageBubble,
             styles.audioBubble,
@@ -178,20 +193,18 @@ function RenderMessage({
                     {formatDuration(Math.floor(item.duration || 0))}
                 </Text>
             </View>
-            <Text style={[styles.messageTime, isPatient && styles.messageTimePatient]}>
-                {formattedTime}
-            </Text>
+            {MessageFooter}
         </View>
-    ), [item.duration, isPatient, formatDuration, formattedTime]);
+    ), [item.duration, isPatient, formatDuration, MessageFooter]);
 
-    // 📌 Sélection du contenu à afficher
-    const renderContent = useCallback(() => {
+    // Sélection du contenu (optimisé avec useMemo)
+    const messageContent = useMemo(() => {
         switch (item.type) {
-            case 'text': return renderTextMessage();
-            case 'image': return renderImageMessage();
-            case 'video': return renderVideoMessage();
-            case 'document': return renderDocumentMessage();
-            case 'audio': return renderAudioMessage();
+            case 'text': return renderTextMessage;
+            case 'image': return renderImageMessage;
+            case 'video': return renderVideoMessage;
+            case 'document': return renderDocumentMessage;
+            case 'audio': return renderAudioMessage;
             default: return null;
         }
     }, [item.type, renderTextMessage, renderImageMessage, renderVideoMessage, renderDocumentMessage, renderAudioMessage]);
@@ -199,6 +212,7 @@ function RenderMessage({
     return (
         <TouchableOpacity
             activeOpacity={0.9}
+            onPress={handleImagePress}
             onLongPress={handleLongPress}
             delayLongPress={400}
         >
@@ -207,7 +221,7 @@ function RenderMessage({
                 isPatient ? styles.messagePatientContainer : styles.messageAssistantContainer,
                 isSelected && styles.messageSelected
             ]}>
-                {renderContent()}
+                {messageContent}
             </View>
         </TouchableOpacity>
     );
@@ -215,9 +229,12 @@ function RenderMessage({
 
 // 📌 Mémoisation du composant pour éviter les re-renders inutiles
 export default memo(RenderMessage, (prevProps, nextProps) => {
+    // ✅ Comparaison profonde pour éviter les re-renders inutiles
     return (
         prevProps.item.idMessage === nextProps.item.idMessage &&
         prevProps.item.status === nextProps.item.status &&
+        prevProps.item.text === nextProps.item.text &&
+        prevProps.item.uri === nextProps.item.uri &&
         prevProps.selectedMessage === nextProps.selectedMessage
     );
 });
@@ -280,20 +297,26 @@ const styles = StyleSheet.create({
         marginVertical: 4,
         position: 'relative',
     },
-    mediaTime: {
+    mediaTimeContainer: {
         position: 'absolute',
         bottom: 8,
         right: 8,
         backgroundColor: 'rgba(0, 0, 0, 0.6)',
-        color: '#fff',
         paddingHorizontal: 6,
         paddingVertical: 2,
         borderRadius: 4,
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    mediaTime: {
+        fontSize: 10,
+        color: '#fff',
     },
     imageMessage: {
         width: 200,
         height: 200,
         borderRadius: 12,
+        backgroundColor: '#E8E8E8', // Couleur de fond pendant le chargement
     },
     videoPlaceholder: {
         width: 200,
@@ -343,6 +366,14 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(0, 0, 0, 0.2)',
         borderRadius: 2,
         marginRight: 8,
+    },
+    loadingOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 10,
     },
     audioDuration: {
         fontSize: 12,

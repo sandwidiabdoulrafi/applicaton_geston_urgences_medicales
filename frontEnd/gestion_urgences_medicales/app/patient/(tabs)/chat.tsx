@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Vibration } from 'react-native';
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { Stack, useRouter } from 'expo-router';
 import SearchBarre from '@/components/searchBarre';
@@ -6,6 +6,8 @@ import { Ionicons } from '@expo/vector-icons';
 import roomMessages from '@/Routes/routeRoom/roomMessages.js';
 import LoadingAnimation from '@/components/LoadingAnimation';
 import Discussion from '@/types/Discussion';
+import socket from '@/Routes/socket/socketClient';
+import { Audio } from 'expo-av';
 
 
 
@@ -16,8 +18,51 @@ export default function Chat() {
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const router = useRouter();
     const flatListRef = useRef<FlatList>(null);
+    const notificationSound = useRef<Audio.Sound>(null);
 
     const filtres = ['toutes', 'en_attente', 'en_cours', 'terminée'];
+
+
+    //chargerment du son de la notification
+
+
+    useEffect(() => {
+        loadNotificationSound();
+        
+        return () => {
+            // Nettoyer le son à la fermeture
+            if (notificationSound.current) {
+                notificationSound.current.unloadAsync();
+            }
+        };
+    }, []);
+
+    const loadNotificationSound = async () => {
+        try {
+            const { sound } = await Audio.Sound.createAsync(
+                require('@/assets/sound/newMessage.mp3'), 
+                { shouldPlay: false }
+            );
+            notificationSound.current = sound;
+            console.log('🔊 Son de notification chargé');
+        } catch (error) {
+            console.error('❌ Erreur chargement son:', error);
+        }
+    };
+
+    const playNotificationSound = async () => {
+        try {
+            if (notificationSound.current) {
+                await notificationSound.current.replayAsync();
+            }
+        } catch (error) {
+            console.error('❌ Erreur lecture son:', error);
+        }
+    };
+
+
+
+
 
     useEffect(() => {
         loadDiscussions();
@@ -57,6 +102,62 @@ export default function Chat() {
         }
     };
 
+
+        /** ---------------------------------------------------------
+         *  SOCKET CONNECTION & LISTENERS
+         * --------------------------------------------------------*/
+        useEffect(() => {
+            console.log("📡 Connexion Socket globale");
+            socket.connect();
+        
+            // ✅ Rejoindre toutes les salles des urgences
+            discussions.forEach(disc => {
+                socket.emit("message:joinRoom", disc.idUrgence);
+            });
+        
+            // 🔔 Écouter les nouveaux messages de TOUTES les salles
+            socket.on("message:new", async(msg) => {
+                
+                await playNotificationSound();
+                Vibration.vibrate(200);
+                console.log("📩 Nouveau message reçu:", msg);
+                
+                // Mettre à jour le badge de notification
+                setDiscussions(prev => prev.map(disc => 
+                    disc.idUrgence === msg.idUrgence 
+                        ? { ...disc, unreadCount: (disc.unreadCount || 0) + 1 }
+                        : disc
+                ));
+                
+                // Rafraîchir la liste si nécessaire
+                loadDiscussions();
+            });
+        
+            // 🔄 Statut changé
+            socket.on("message:statusChanged", ({ idUrgence, status }) => {
+                setDiscussions(prev => prev.map(disc =>
+                    disc.idUrgence === idUrgence 
+                        ? { ...disc, statut: status }
+                        : disc
+                ));
+            });
+
+        
+            return () => {
+                console.log("🔴 Déconnexion Socket");
+                discussions.forEach(disc => {
+                    socket.emit("message:leaveRoom", disc.idUrgence);
+                });
+                socket.off("connected");
+                socket.off("message:new");
+                socket.off("urgence:statusChanged");
+                socket.off("message:error");
+                socket.disconnect();
+            };
+        }, [discussions]);
+
+
+
     const showDiscussion = (id: number, urgenceTitle: string) => {
         router.push({
             pathname: `/patient/chat/[id]`,
@@ -67,46 +168,57 @@ export default function Chat() {
         });
     };
 
-    const renderItemDiscussion = ({ item }: { item: Discussion }) => (
-        <TouchableOpacity
-            style={styles.card}
-            onPress={() => showDiscussion(item.idUrgence, item.intitule)}
-            activeOpacity={0.7}
-        >
-            <View style={styles.iconContainer}>
-                <Ionicons 
-                    name={getIconName(item.typeEtablissement)} 
-                    size={28} 
-                    color="#2E86C1" 
-                />
-            </View>
-            <View style={styles.infoContainer}>
-                <View style={styles.rowInfo}>
-                    <Text style={styles.title} numberOfLines={1}>
-                        {item.intitule}
-                    </Text>
-                    <Text style={styles.subTitle} numberOfLines={1}>
-                        {item.nomEtablissement ?? "Service inconnu"}
-                    </Text>
+    const renderItemDiscussion = ({ item }: { item: Discussion }) => {
+
+        const hasUnread = (item.unreadCount || 0) > 0;
+
+        return (
+
+            
+            <TouchableOpacity
+                style={styles.card}
+                onPress={() => showDiscussion(item.idUrgence, item.intitule)}
+                activeOpacity={0.7}
+            >
+                <View style={styles.iconContainer}>
+                    <Ionicons 
+                        name={getIconName(item.typeEtablissement)} 
+                        size={28} 
+                        color="#2E86C1" 
+                    />
                 </View>
-                <View style={styles.rowInfo}>
-                    {item.typeEtablissement && (
-                        <Text style={styles.detail}>Type: {item.typeEtablissement}</Text>
+                <View style={styles.infoContainer}>
+                    <View style={styles.rowInfo}>
+                        <Text style={styles.title} numberOfLines={1}>
+                            {item.intitule}
+                        </Text>
+                        <Text style={styles.subTitle} numberOfLines={1}>
+                            {item.nomEtablissement ?? "Service inconnu"}
+                        </Text>
+                    </View>
+                    <View style={styles.rowInfo}>
+                        {item.typeEtablissement && (
+                            <Text style={styles.detail}>Type: {item.typeEtablissement}</Text>
+                        )}
+                    </View>
+                    <Text style={[styles.status, getStatusStyle(item.statut)]}>
+                        Urgence status : {
+                            item.statut === "en_cours" ? "En cours" : 
+                            item.statut === "terminee" ? "Terminée" :
+                            item.statut === "en_attente" ? "En attente" : "rien"
+                        }
+                    </Text>
+                    {hasUnread && (
+                            <View style={styles.notif}>
+                                <Text style={styles.notifText}>
+                                    {item.unreadCount}
+                                </Text>
+                            </View>
                     )}
                 </View>
-                <Text style={[styles.status, getStatusStyle(item.statut)]}>
-                    Urgence status : {
-                        item.statut === "en_cours" ? "En cours" : 
-                        item.statut === "terminee" ? "Terminée" :
-                        item.statut === "en_attente" ? "En attente" : "rien"
-                    }
-                </Text>
-                <View style={styles.notif}>
-                    <Text style={{color:'white', fontWeight:'600'}}>2</Text>
-                </View>
-            </View>
-        </TouchableOpacity>
-    );
+            </TouchableOpacity>
+        )
+    };
 
     const getStatusStyle = (status: string) => {
         switch (status) {
@@ -293,5 +405,10 @@ const styles = StyleSheet.create({
         fontSize: 13,
         marginTop: 8,
         textAlign: 'center',
+    },
+    notifText: {
+        color: 'white',
+        fontWeight: '700',
+        fontSize: 12,
     },
 });

@@ -1,16 +1,20 @@
 export default interface ServiceSante {
-    id: number;
-    nomEtablissement: string;
-    typeEtablissement: string;
-    telephone: string;
-    adresse: string;
-    ville: string;
+    id: number; 
+    idEtablissement: string,
+    nomEtablissement: string; 
+    typeEtablissement: string; 
+    telephone: string; 
+    adresse: string; 
+    ville: string; 
+    email:string, 
+    ouvert24h: boolean; 
     heureOuverture: string;
     heureFermeture: string;
     description: string;
     photoProfil: string;
     latitude: number;
+    isActive: boolean;
     longitude: number;
+    lastUpdated:  Date;
+    motDePasse: string;
 }
-
-

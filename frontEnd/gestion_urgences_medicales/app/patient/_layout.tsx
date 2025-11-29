@@ -1,19 +1,25 @@
+import { getUserPatient } from '@/Routes/routeRoom/roomPatient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Stack } from 'expo-router';
-// import { useAuth } from '@/contexts/AuthContext';
 import { Redirect } from 'expo-router';
+import { useEffect } from 'react';
+
+import InitDB from '../../Routes/routeRoom/index';
 
 export default function PatientLayout() {
-    // const { user, isAuthenticated } = useAuth();
-
-    // 🔒 Protection : Vérification de l'authentification (à activer plus tard)
-    // if (!isAuthenticated) {
-    //   return <Redirect href="/login" />;
-    // }
-
-    // 🔒 Protection : Vérification du type d'utilisateur (à activer plus tard)
-    // if (user?.type !== 'patient') {
-    //   return <Redirect href="/unauthorized" />;
-    // }
+    // Initialiser les DB qui esst celui du patient
+    useEffect(()=>{
+        const charger = async()=>{
+            console.log(" Init DB patient...");
+            await InitDB();
+            const patient = await getUserPatient();
+            await AsyncStorage.setItem(
+                "userPatient", 
+                JSON.stringify(patient)
+            );
+        }
+        
+    },[])
 
     return (
         <Stack 
@@ -35,30 +41,7 @@ export default function PatientLayout() {
             }} 
         />
         
-        {/* Écrans supplémentaires sans tabs */}
-        {/* <Stack.Screen 
-            name="appointment-details"
-            options={{ 
-            title: 'Détails du rendez-vous',
-            presentation: 'card'
-            }} 
-        /> */}
-        
-        {/* <Stack.Screen 
-            name="emergency-request"
-            options={{ 
-            title: 'Demande d\'urgence',
-            presentation: 'modal'
-            }} 
-        /> */}
-        
-        {/* <Stack.Screen 
-            name="medical-history-detail"
-            options={{ 
-            title: 'Historique médical',
-            presentation: 'card'
-            }} 
-        /> */}
+            
         </Stack>
     );
 }

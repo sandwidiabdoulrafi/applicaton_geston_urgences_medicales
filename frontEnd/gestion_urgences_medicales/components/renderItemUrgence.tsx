@@ -5,6 +5,8 @@ import { useRouter } from 'expo-router';
 
 export default function RenderItemUrgence({item}) {
 
+    console.log("\n\n\n\n\t ++=+=+=====-=-=-=-=-====--  rendeur item Urgence item  : ", item)
+
 
     const router = useRouter();
 
@@ -63,7 +65,7 @@ export default function RenderItemUrgence({item}) {
                     { color: statutStyle.color, backgroundColor: statutStyle.backgroundColor },
                     ]}
                 >
-                    {item.statut.replace('_', ' ').toUpperCase()}
+                    {item.statut}
                 </Text>
 
                 <View style={styles.dateContainer}>
