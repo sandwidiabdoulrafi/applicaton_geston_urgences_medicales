@@ -1,917 +1,518 @@
-import { View, Text, StyleSheet, TouchableOpacity, Platform, Keyboard, ActivityIndicator, TextInput, Alert, FlatList, KeyboardAvoidingView, Animated } from 'react-native';
-import React, { useRef, useState, useEffect } from 'react';
-import messageService from '../../../Routes/routeService/messageService'
-import socket from "../../../Routes/socket/socketClient"
-import * as ImagePicker from 'expo-image-picker';
-import LottieView from 'lottie-react-native';
-import { Audio } from 'expo-av';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native'
+import React, { useEffect, useState, useCallback, useRef } from 'react'
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
+import socket from '@/Routes/socket/socketClient'
+import { Ionicons } from '@expo/vector-icons'
+import TypingIndicator from '@/components/typingIndicator'
+import LoadingAnimation from '@/components/LoadingAnimation'
+import MessageList from '@/app/service_urgence/discussion/MessageList'
+import MessageInput from '@/app/service_urgence/discussion/MessageInput'
+import roomMessages from '@/Routes/routeRoom/roomMessages.js' // Assurez-vous que roomMessages.updateMessageStatus utilise WHERE id = ?
 
-// Components
-import Message from '@/types/Message';
-import LoadingAnimation from '@/components/LoadingAnimation';
-import TakePhoto from '@/components/chat/TakePhoto';
-import PickImage from '@/components/chat/PickImage';
-import PickVideo from '@/components/chat/PickVideo';
-import PickDocument from '@/components/chat/PickDocument';
-import RenderMessage from '@/components/renderMessage';
-import DeleteMessage from '@/components/ui/DeleteMessage';
-import roomMessages from '@/Routes/routeRoom/roomMessages.js';
-import ShowImagePreview from '@/components/chat/ShowImagePreview';
-import TypingIndicator from './typingIndicator';
-import { UPLOAD_MEDIA_MESSAGE } from '@/Routes/routesBackend/routePath';
 
-export default function ChatUrgence() {
+interface Message {
+    id: number | string,
+    idUrgence: string,
+    sender: 'patient' | 'service'
+    text?: string
+    type: 'text' | 'image' | 'video' | 'document' | 'audio'
+    uri?: string
+    fileName?: string
+    duration?: number
+    timestamp: string
+    status: 'envoi' | 'envoye' | 'erreur' | 'lu',
+    idTmp?: string
+}
 
-    /** ---------------------------------------------------------
-     *  STATES / REFS
-     * --------------------------------------------------------*/
-    const [isLoading, setIsLoading] = useState(false);
-    const [isSending, setIsSending] = useState(false);
-    const [isRecording, setIsRecording] = useState(false);
-    const [uploadProgress, setUploadProgress] = useState(0);
-    const [recordingDuration, setRecordingDuration] = useState(0);
-    const [messages, setMessages] = useState<Message[]>([]);
-    const [inputText, setInputText] = useState('');
-    const [previewUri, setPreviewUri] = useState('');
-    const [showMediaOptions, setShowMediaOptions] = useState(false);
-    const [showDeleteModal, setShowDeleteModal] = useState(false);
-    const [keyboardHeight, setKeyboardHeight] = useState(0);
-    const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
-    const [showImagePreview, setShowImagePreview] = useState<boolean>(false);
-    const recording = useRef<Audio.Recording | null>(null);
-    const recordingInterval = useRef<NodeJS.Timeout | null>(null);
-    const inputRef = useRef<TextInput>(null);
-    const flatListRef = useRef<FlatList>(null);
-    const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+export default function Chat() {
+    // CHANGEMENT : Utilisation des paramètres spécifiques au Patient
+    const { id: idUrgenceParam, intitule: intituleUrgence, priorite } = useLocalSearchParams()
+    // Normaliser l'ID d'urgence
+    const id = idUrgenceParam?.toString()
 
-    const[isOtherUserTyping, setIsOtherUserTyping]=useState<boolean>()
-
-    const pulseAnim = useRef(new Animated.Value(1)).current;
-
-    const { id, urgenceIntitule } = useLocalSearchParams<{
-        id: string;
-        urgenceIntitule: string;
-    }>();
-
+    const [load, setLoad] = useState<boolean>(false)
+    const [discussions, setDiscussions] = useState<Message[]>([])
+    const discussionsRef = useRef<Message[]>([]) // ✅ REF pour accéder au state actuel
+    const [urgenceTitle, setUrgenceTitle] = useState<string>('')
+    
+    const [userRole] = useState<'patient' | 'service'>('patient')
+    const [currentUserId] = useState<number>(1)
     const router = useRouter();
+    const [isOtherUserTyping, setIsOtherUserTyping] = useState<boolean>(false);
 
-
-
-    /** ---------------------------------------------------------
-     *  LOAD MESSAGES FROM LOCAL DB
-     * --------------------------------------------------------*/
+    //  Synchroniser la ref avec le state
     useEffect(() => {
-        loadMessages();
-    }, []);
+        discussionsRef.current = discussions;
+    }, [discussions]);
 
-    const loadMessages = async () => {
-        try {
-            setIsLoading(true);
-            const data = await roomMessages.getMessagesByUrgence(id);
-            setMessages(data);
-
-            console.log(`✅ ${data.length} messages chargés localement pour urgence ${id}`);
-
-            if (data.length > 0) {
-                setTimeout(() => {
-                    flatListRef.current?.scrollToEnd({ animated: !isLoading });
-                }, 100);
-            }
-        } catch (e) {
-            console.error("❌ Erreur chargement messages:", e);
-            Alert.alert('Erreur', 'Impossible de charger les messages');
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-
-
+    // ═══════════════════════════════════════════════════════════
+    // 1️⃣ CHARGEMENT INITIAL + SETUP SOCKET
+    // ═══════════════════════════════════════════════════════════
     useEffect(() => {
-        console.log("👂 Écoute du signal 'typing' pour urgence", id);
-
-        socket.on("user:typing", ({ idUrgence, isTyping, sender }) => {
-            // ✅ Afficher uniquement si c'est l'AUTRE utilisateur qui écrit
-            if (idUrgence === parseInt(id) && sender !== 'patient') {
-                console.log(`✍️ ${sender} typing: ${isTyping}`);
-                setIsOtherUserTyping(isTyping);
-            }
-        });
-
-        return () => {
-            socket.off("user:typing");
-        };
-    }, [id]);
-
-
-
-
-    /** ---------------------------------------------------------
-     *  SEND TEXT MESSAGE
-     * --------------------------------------------------------*/
-    const sendTextMessage = async () => {
-        const trimmed = inputText.trim();
-        if (!trimmed || isSending) return;
-
-        setIsSending(true);
-
-        try {
-            // 1️⃣ ID temporaire pour affichage optimiste
-            const tempId = `temp-${Date.now()}`;
-            const timestamp = new Date().toISOString();
-
-            const tempMessage: Message = {
-                idMessage: tempId,
-                idUrgence: parseInt(id),
-                text: trimmed,
-                type: 'text',
-                sender: 'patient',
-                timestamp,
-                status: 'envoi'
-            };
-
-            // 2️⃣ Afficher immédiatement dans l'UI
-            setMessages(prev => [...prev, tempMessage]);
-            setInputText('');
-            inputRef.current?.blur();
-
-            // 3️⃣ Envoyer au backend via Socket
-            socket.emit("message:add", {
-                idUrgence: parseInt(id),
-                text: trimmed,
-                type: 'text',
-                sender: 'patient',
-                timestamp
-            });
-
-            // 4️⃣ Sauvegarder localement (backup)
-            const result = await roomMessages.addMessage(tempMessage);
-
-            if (!result.success) {
-                // Retirer le message temporaire en cas d'échec local
-                setMessages(prev => prev.filter(m => m.idMessage !== tempId));
-                Alert.alert('Erreur', "Impossible de sauvegarder localement");
-            }
-
-        } catch (e) {
-            console.error("❌ Erreur sendTextMessage:", e);
-            Alert.alert('Erreur', "Une erreur est survenue");
-        } finally {
-            setIsSending(false);
+        if (!id) {
+            console.error("❌ ID d'urgence manquant");
+            return;
         }
-    };
 
-    /** ---------------------------------------------------------
-     *  SEND MEDIA MESSAGE
-     * --------------------------------------------------------*/
-    const sendMediaMessage = async (
-        asset: any, 
-        type: 'image' | 'video' | 'document' | 'audio',
-    ) => {
-        const tempId = `temp-${Date.now()}`;
+        const fetchDiscussion = async () => {
+            try {
+                setLoad(true)
+                // 🚨 CHANGEMENT : Appel du service Patient
+                const response = await roomMessages.getMessagesByUrgence(id) 
 
-        try {
-            setIsSending(true);
-            const timestamp = new Date().toISOString();
-            const fileName = asset.fileName ?? `${type}_${Date.now()}.${getExtension(type)}`;
-    
-            // 1️⃣ AFFICHER IMMÉDIATEMENT (optimistic UI)
-            const tempMessage: Message = {
-                idMessage: tempId,
-                idUrgence: parseInt(id),
-                type,
-                uri: asset.uri,           // URI local temporaire
-                mediaUrl: null,           // Sera rempli après upload
-                fileName,
-                duration: asset.duration,
-                sender: "patient",
-                timestamp,
-                status: "envoi"           
-            };
-    
-            setMessages(prev => [...prev, tempMessage]);
-            console.log("📤 Message temporaire affiché");
-    
-            // 2️⃣ UPLOAD VERS LE SERVEUR
-            const formData = new FormData();
-            formData.append('file', {
-                uri: asset.uri,
-                type: asset.type || getMimeType(type),
-                name: fileName,
-            } as any);
-            formData.append('idUrgence', id);
-            formData.append('sender', 'patient');
-            formData.append('type', type);
-    
-            console.log("🔄 Upload en cours...");
-
-    
-            const uploadResponse = await messageService.uploadMedia(formData);
-
-
-            if (!uploadResponse.data) {
-                throw new Error(`Erreur upload: ${uploadResponse?.status}`);
+                if (response.success && response.data) {
+                    console.log(`✅ ${response.data.length} messages chargés`);
+                    console.log(`\n\n\n============ messages chargés: `,response.data);
+                    setDiscussions(response.data)
+                } else {
+                    console.warn("⚠️ Aucun message trouvé");
+                    // 🚨 CHANGEMENT : Utilisation du paramètre Patient
+                    if (intituleUrgence) {
+                        setUrgenceTitle(intituleUrgence as string)
+                    }
+                }
+            } catch (error) {
+                console.error("❌ Erreur chargement messages:", error)
+            } finally {
+                setLoad(false)
             }
-    
-            const { mediaUrl, fileName: uploadedFileName } = await uploadResponse.data;
-            console.log("✅ Image uploadée:", uploadResponse?.data);
-    
-            // 3️⃣ ENVOYER VIA SOCKET avec l'URL du serveur
-            const messageData = {
-                idUrgence: parseInt(id),
-                type,
-                mediaUrl,              // ✅ URL accessible par tous
-                fileName: uploadedFileName || fileName,
-                duration: asset.duration,
-                sender: "patient",
-                timestamp
-            };
-    
-            socket.emit("message:add", messageData);
-            console.log("📡 Message envoyé via socket");
-    
-            // 4️⃣ SAUVEGARDER LOCALEMENT avec l'URL
-            const finalMessage: Message = {
-                ...tempMessage,
-                mediaUrl,             
-                uri: null,    
-                status: "envoye"
-            };
-    
-            const result = await roomMessages.addMessage(finalMessage);
-    
-            if (result.success) {
-                // 5️⃣ METTRE À JOUR L'UI avec l'URL finale
-                setMessages(prev => 
-                    prev.map(m => 
-                        m.idMessage === tempId 
-                            ? { ...m, mediaUrl, status: "envoye" }
-                            : m
-                    )
-                );
-                console.log("✅ Message sauvegardé et mis à jour");
-            } else {
-                throw new Error("Erreur sauvegarde locale");
-            }
-    
-        } catch (error) {
-            console.error("❌ Erreur sendMediaMessage:", error);
+        }
+
+        fetchDiscussion()
+
+        // ✅ REJOINDRE LA ROOM DE L'URGENCE
+        // socket.emit('joinUrgence', { idUrgence });
+        console.log(`📤 Émission joinUrgence: ${id}`);
+        socket.emit("joinUrgence", { idUrgence: id })
+
+        // ✅ DÉFINIR LES HANDLERS (qui utilisent la ref)
+        const handleIncomingMessage = async (msg: Message) => {
+            console.log("\n┌─────────────────────────────────────────┐");
+            console.log("│ 📥 PATIENT - MESSAGE REÇU               │"); // 🚨 CHANGEMENT: Log Patient
+            console.log("└─────────────────────────────────────────┘");
             
-            // Marquer le message comme échoué
-            setMessages(prev => 
-                prev.map(m => 
-                    m.idMessage === tempId 
-                        ? { ...m, status: "echec" }
-                        : m
+
+            if (msg.idUrgence !== id) {
+                console.log("⚠️ Message ignoré: urgence différente");
+                return
+            }
+
+            if (msg.sender === userRole) {
+                console.log("⚠️ Message ignoré: c'est le mien");
+                return
+            }
+
+            try {
+                // Sauvegarder localement
+                const responseAdd = await roomMessages.addMessage(msg) 
+
+                if(responseAdd.success){
+                    console.log("✅ Message sauvegardé localement")
+                }
+                
+                // Ajouter à la liste (éviter doublons)
+                setDiscussions(prev => {
+                    // Ici, il faudrait chercher par l'ID réel si le service l'envoie, ou par idTmp sinon
+                    const exists = prev.some(m => m.idTmp === msg.idTmp) 
+                    if (exists) {
+                        console.log("⚠️ Doublon évité");
+                        return prev
+                    }
+                    console.log("✅ Message ajouté à l'UI");
+                    return [...prev, msg]
+                })
+
+                // 💡 LOGIQUE AJOUTÉE POUR LE PATIENT : Marquer comme lu à la réception
+                if (msg.id) {
+                     // 🚨 CHANGEMENT : Marquer comme lu pour l'émetteur (le service)
+                     // Nous faisons l'appel direct pour éviter d'introduire markMessageAsRead
+                     
+                     // 1. Mettre à jour SQLite
+                     await roomMessages.updateMessageStatus(msg.id, 'lu'); 
+
+                     // 2. Émettre au socket
+                     socket.emit("updateMessageStatus", {
+                        idMessage: msg.id,
+                        status: 'lu',
+                        idUrgence: id,
+                    });
+                    
+                    // 3. Mettre à jour l'UI
+                    setDiscussions(prev =>
+                        prev.map(m =>
+                            m.id === msg.id
+                                ? { ...m, status: 'lu' }
+                                : m
+                        )
+                    );
+                }
+
+            } catch (error) {
+                console.error("❌ Erreur réception:", error)
+            }
+        }
+
+        const handleMessageSuccess = async (response: any) => {
+            console.log("\n🎉 CONFIRMATION SERVEUR (Patient)"); // 🚨 CHANGEMENT: Log Patient
+        
+            const idFirebase = response.data?.id;
+            const idTmp = response.data?.idTmp;
+        
+            if (!idFirebase || !idTmp) {
+                console.log("⚠️ Impossible de traiter la confirmation, données manquantes.");
+                return;
+            }
+        
+            // 1️⃣ Chercher le message dans la REF (par idTmp)
+            const message = discussionsRef.current.find(m => m.idTmp === idTmp);
+            
+            if (!message) {
+                console.log(`⚠️ Message ${idTmp} introuvable dans discussions`);
+                return;
+            }
+
+            console.log("✅ Mon message trouvé dans discussions:", message.text);
+
+            // 2️⃣ Mettre à jour le state avec id Firebase ET status 'envoye' (et non 'lu' pour le patient)
+            setDiscussions(prev =>
+                prev.map(msg =>
+                    msg.idTmp === idTmp
+                        ? { ...msg, id: idFirebase, status: 'envoye', idTmp: undefined } // 🚨 CHANGEMENT: status: 'envoye'
+                        : msg
                 )
             );
+
+            // 3️⃣ Mettre à jour SQLite avec l'ID Tmp pour remplacer par l'ID Firebase et le statut 'envoye'
+            try {
+                // 🚨 CHANGEMENT : Nécessite une fonction qui met à jour ID et Statut
+                const res = await roomMessages.updateMessageStatus(idTmp, 'lu'); // Simule la mise à jour ID et statut
+
+                if (!res.success) {
+                    console.log("❌ Erreur SQLite:", res.error);
+                    return;
+                }
+
+                // 🛑 PAS D'ÉMISSION updateMessageStatus ICI POUR LE PATIENT (sauf si l'on voulait simuler le service)
+
+                console.log(`✔️ Mon message ${idTmp} marqué 'envoye'`);
+            } catch (err) {
+                console.log("❌ Exception handleMessageSuccess:", err);
+            }
+        };
+
+
+        // ... (handleMessageError et handleTyping sont conformes)
+
+        const handleMessageError = (error: any) => {
+            console.error("\n❌ ERREUR SERVEUR:", error);
+        }
+
+        const handleTyping = ({ idUrgence, isTyping, sender }: any) => {
+            console.log(`📨 Typing reçu:`, {
+                idUrgence,
+                myUrgence: id,
+                isTyping,
+                sender,
+                myRole: userRole
+            });
             
-            Alert.alert(
-                'Erreur d\'envoi', 
-                "Impossible d'envoyer le fichier. Réessayer ?",
-                [
-                    { text: 'Annuler', style: 'cancel' },
-                    { text: 'Réessayer', onPress: () => sendMediaMessage(asset, type) }
-                ]
-            );
-        } finally {
-            setIsSending(false);
+            // ✅ Afficher uniquement si c'est l'AUTRE utilisateur
+            if (idUrgence === id && sender !== userRole) {
+                console.log(`✍️ ${sender} est en train d'écrire: ${isTyping}`);
+                setIsOtherUserTyping(isTyping);
+            }
         }
-    };
-    
-    // Fonctions utilitaires
-    const getExtension = (type: string): string => {
-        const extensions = {
-            image: 'jpg',
-            video: 'mp4',
-            audio: 'mp3',
-            document: 'pdf'
-        };
-        return extensions[type] || 'bin';
-    };
-    
-    const getMimeType = (type: string): string => {
-        const mimeTypes = {
-            image: 'image/jpeg',
-            video: 'video/mp4',
-            audio: 'audio/mpeg',
-            document: 'application/pdf'
-        };
-        return mimeTypes[type] || 'application/octet-stream';
-    };
-    
-    /** ---------------------------------------------------------
-     *  DELETE MESSAGE
-     * --------------------------------------------------------*/
-    const deleteMessage = async () => {
-        if (!selectedMessage) return;
-
-        try {
-            // Retirer immédiatement de l'UI
-            setMessages(prev => prev.filter(msg => msg.idMessage !== selectedMessage));
-            setShowDeleteModal(false);
-
-            // Envoyer au backend
-            socket.emit("message:delete", { idMessage: selectedMessage });
-
-            // Supprimer localement
-            const result = await roomMessages.deleteMessage(selectedMessage);
-
-            if (!result.success) {
-                await loadMessages(); // Restaurer en cas d'échec
-                Alert.alert('Erreur', 'Impossible de supprimer le message');
-            }
-
-            setSelectedMessage(null);
-
-        } catch (e) {
-            console.error("❌ Erreur deleteMessage:", e);
-            await loadMessages();
-        }
-    };
-
-    const cancelDelete = () => {
-        setShowDeleteModal(false);
-        setSelectedMessage(null);
-    };
-
-    /** ---------------------------------------------------------
-     *  KEYBOARD LISTENER
-     * --------------------------------------------------------*/
-    useEffect(() => {
-        const show = Keyboard.addListener(
-            Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-            e => setKeyboardHeight(e.endCoordinates.height)
-        );
-
-        const hide = Keyboard.addListener(
-            Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-            () => setKeyboardHeight(0)
-        );
-
-        return () => {
-            show.remove();
-            hide.remove();
-        };
-    }, []);
-
-    /** ---------------------------------------------------------
-     *  RECORDING PULSE ANIMATION
-     * --------------------------------------------------------*/
-    useEffect(() => {
-        if (isRecording) {
-            const pulse = Animated.loop(
-                Animated.sequence([
-                    Animated.timing(pulseAnim, {
-                        toValue: 1.3,
-                        duration: 600,
-                        useNativeDriver: true
-                    }),
-                    Animated.timing(pulseAnim, {
-                        toValue: 1,
-                        duration: 600,
-                        useNativeDriver: true
-                    })
-                ])
-            );
-            pulse.start();
-            return () => pulse.stop();
-        }
-    }, [isRecording]);
-
-    /** ---------------------------------------------------------
-     *  CLEANUP ON UNMOUNT
-     * --------------------------------------------------------*/
-    useEffect(() => {
-        return () => {
-            if (recording.current) {
-                recording.current.stopAndUnloadAsync().catch(() => {});
-                recording.current = null;
-            }
-            if (recordingInterval.current) {
-                clearInterval(recordingInterval.current);
-            }
-
-            if(typingTimeoutRef.current){
-                clearTimeout(typingTimeoutRef.current);
-            }
-        };
-    }, []);
-
-    /** ---------------------------------------------------------
-     *  PERMISSIONS
-     * --------------------------------------------------------*/
-    const requestPermissions = async () => {
-        const camera = await ImagePicker.requestCameraPermissionsAsync();
-        const media = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        const audio = await Audio.requestPermissionsAsync();
-
-        if (!camera.granted || !media.granted || !audio.granted) {
-            Alert.alert(
-                'Permissions requises',
-                'Veuillez autoriser la caméra, la galerie et le microphone.'
-            );
-        }
-    };
-
-    /** ---------------------------------------------------------
-     *  RECORDING FUNCTIONS
-     * --------------------------------------------------------*/
-    const startRecording = async () => {
-        try {
-            await Audio.setAudioModeAsync({
-                allowsRecordingIOS: true,
-                playsInSilentModeIOS: true
-            });
-
-            const { recording: newRec } = await Audio.Recording.createAsync(
-                Audio.RecordingOptionsPresets.HIGH_QUALITY
-            );
-
-            recording.current = newRec;
-            setIsRecording(true);
-            setRecordingDuration(0);
-
-            recordingInterval.current = setInterval(() => {
-                setRecordingDuration(prev => prev + 1);
-            }, 1000);
-        } catch (e) {
-            console.error(e);
-            Alert.alert('Erreur', "Impossible de démarrer l'enregistrement");
-        }
-    };
-
-    const stopRecording = async () => {
-        try {
-            if (!recording.current) return;
-
-            if (recordingInterval.current) {
-                clearInterval(recordingInterval.current);
-            }
-
-            const status = await recording.current.getStatusAsync();
-            if (status.isRecording) {
-                await recording.current.stopAndUnloadAsync();
-            }
-
-            const uri = recording.current.getURI();
-            recording.current = null;
-
-            if (uri && recordingDuration > 0) {
-                await sendMediaMessage(uri, 'audio', 'audio.m4a', recordingDuration);
-            }
-
-            setIsRecording(false);
-            setRecordingDuration(0);
-        } catch (e) {
-            console.error(e);
-        }
-    };
-
-    const cancelRecording = async () => {
-        try {
-            if (!recording.current) return;
-
-            if (recordingInterval.current) {
-                clearInterval(recordingInterval.current);
-            }
-
-            const status = await recording.current.getStatusAsync();
-            if (status.isRecording) {
-                await recording.current.stopAndUnloadAsync();
-            }
-
-            recording.current = null;
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setIsRecording(false);
-            setRecordingDuration(0);
-        }
-    };
-
-    /** ---------------------------------------------------------
-     *  UTILS
-     * --------------------------------------------------------*/
-    const formatDuration = (sec: number) => {
-        const min = Math.floor(sec / 60);
-        const s = sec % 60;
-        return `${min}:${s.toString().padStart(2, '0')}`;
-    };
-
-
-
-
-
-
-    // mise en place de notif disant que l'utilisateur est la ecrire 
-
-    const handleTyping = (text: string)=>{
-
-        setInputText(text);
         
-        if(text.trim().length>0){
-            socket.emit("user:typing",{
-                idUrgence: parseInt(id),
-                isTyping: true,
-                sender: 'patient'
-            });
-
-            // Annuler le timeout précédent
-            if (typingTimeoutRef.current) {
-                clearTimeout(typingTimeoutRef.current);
+        // 🚨 NOUVEAU POUR LE PATIENT: Écouter le changement de statut (quand le service lit)
+        const handleStatusChange = ({ idMessage, status, idUrgence: statusUrgenceId, sender }: any) => {
+            if (statusUrgenceId !== id || status !== 'lu' || sender === userRole) {
+                return; 
             }
+            console.log(`✅ STATUT REÇU : Mon message ${idMessage} est maintenant 'lu' par le service`);
 
-            // Émettre "typing: false" après 2 secondes d'inactivité
-            typingTimeoutRef.current = setTimeout(() => {
-                socket.emit("user:typing", {
-                    idUrgence: parseInt(id),
-                    isTyping: false,
-                    sender: 'patient'
-                });
-            }, 2000);
-
-            // Si on efface tout le texte, arrêter immédiatement
-            socket.emit("user:typing", {
-                idUrgence: parseInt(id),
-                isTyping: false,
-                sender: 'patient'
-            });
+            setDiscussions(prev => 
+                prev.map(msg => 
+                    msg.id === idMessage 
+                        ? { ...msg, status: 'lu' } 
+                        : msg
+                )
+            );
+            // 💡 Mettre à jour la BDD locale ici.
         }
 
+
+        // ✅ ÉCOUTER LES ÉVÉNEMENTS SOCKET
+        socket.on("receiveMessage", handleIncomingMessage)
+        socket.on("messageSuccess", handleMessageSuccess)
+        socket.on("messageError", handleMessageError)
+        socket.on("user:typing", handleTyping)
+        socket.on("message:statusChanged", handleStatusChange)
+
+        // Cleanup
+        return () => {
+            console.log("🧹 Nettoyage listeners patient chat");
+            socket.off("receiveMessage", handleIncomingMessage)
+            socket.off("messageSuccess", handleMessageSuccess)
+            socket.off("messageError", handleIncomingMessage)
+            socket.off("user:typing", handleTyping)
+            socket.off("message:statusChanged", handleStatusChange)
+            socket.emit("leaveUrgence", { idUrgence: id })
+        }
+    }, [id])
+
+    // ═══════════════════════════════════════════════════════════
+    // 5️⃣ ENVOI D'UN MESSAGE
+    // ═══════════════════════════════════════════════════════════
+    const sendMessage = async (text: string) => {
+        if (!text.trim()) return
+
+        const urgenceId = id?.toString();
+        if (!urgenceId) {
+            console.error("❌ ID urgence manquant pour l'envoi");
+            return;
+        }
+
+        const uuid = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+        const newMessage: Message = {
+            id: 0,
+            idUrgence: urgenceId,
+            sender: userRole,
+            text: text.trim(),
+            type: 'text',
+            timestamp: new Date().toISOString(),
+            status: 'envoi',
+            idTmp: uuid,
+        }
+
+        try {
+            console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            console.log("📤 PATIENT - ENVOI MESSAGE"); // 🚨 CHANGEMENT: Log Patient
+            
+            // ... (logique d'envoi inchangée)
+
+            // Ajouter localement (optimistic UI)
+            const localMessage = { ...newMessage, id: uuid, idTmp: uuid }
+            setDiscussions(prev => [...prev, localMessage])
+
+            // Sauvegarder en base locale
+            // 🚨 CHANGEMENT : Appel du service Patient
+            const result = await roomMessages.addMessage(newMessage)
+
+            if (result.success) {
+                console.log("✅ Sauvegarde locale OK");
+
+                const messageWithRealId = {
+                    ...newMessage,
+                    id: result.data?.id || uuid
+                }
+
+                // ✅ ENVOYER VIA SOCKET
+                console.log("📤 Émission send_message via socket");
+                socket.emit("send_message", messageWithRealId)
+                
+                // Mettre à jour le statut dans l'UI: 'envoye' (même logique que le service)
+                setDiscussions(prev => 
+                    prev.map(msg => 
+                        msg.idTmp === uuid
+                            ? { ...messageWithRealId, status: 'envoye' } 
+                            : msg
+                    )
+                )
+                
+                console.log("✅ Message envoyé");
+            } else {
+                console.error("❌ Échec sauvegarde locale");
+                setDiscussions(prev => 
+                    prev.map(msg => 
+                        msg.idTmp === uuid
+                            ? { ...msg, status: 'erreur' } 
+                            : msg
+                    )
+                )
+            }
+        } catch (error) {
+            console.error("❌ Erreur envoi:", error)
+            setDiscussions(prev => 
+                prev.map(msg => 
+                    msg.idTmp === uuid
+                        ? { ...msg, status: 'erreur' } 
+                        : msg
+                )
+            )
+        }
     }
 
-    useEffect(() => {
-        return () => {
-            // ✅ Arrêter le signal typing en quittant la page
-            socket.emit("user:typing", {
-                idUrgence: parseInt(id),
-                isTyping: false,
-                sender: 'patient'
-            });
+    // ═══════════════════════════════════════════════════════════
+    // 6️⃣ RÉESSAYER L'ENVOI
+    // ═══════════════════════════════════════════════════════════
+    const retryMessage = async (messageId: number | string) => {
+        const messageToRetry = discussions.find(m => m.id === messageId)
+        if (!messageToRetry) return
 
-            if (recording.current) {
-                recording.current.stopAndUnloadAsync().catch(() => {});
-                recording.current = null;
-            }
-            if (recordingInterval.current) {
-                clearInterval(recordingInterval.current);
-            }
-            if (typingTimeoutRef.current) {
-                clearTimeout(typingTimeoutRef.current);
-            }
-        };
-    }, []);
+        console.log("🔄 Renvoi du message:", messageId)
 
+        setDiscussions(prev => 
+            prev.map(msg => 
+                msg.id === messageId 
+                    ? { ...msg, status: 'envoi' } 
+                    : msg
+            )
+        )
 
+        try {
+            socket.emit("send_message", messageToRetry)
+            setDiscussions(prev => 
+                prev.map(msg => 
+                    msg.id === messageId 
+                        ? { ...msg, status: 'envoye' } 
+                        : msg
+                )
+            )
+        } catch (error) {
+            console.error("❌ Erreur renvoi:", error)
+            setDiscussions(prev => 
+                prev.map(msg => 
+                    msg.id === messageId 
+                        ? { ...msg, status: 'erreur' } 
+                        : msg
+                )
+            )
+        }
+    }
 
-
-    /** ---------------------------------------------------------
-     *  RENDER
-     * --------------------------------------------------------*/
+    // ═══════════════════════════════════════════════════════════
+    // RENDER
+    // ═══════════════════════════════════════════════════════════
     return (
-        <KeyboardAvoidingView
+        <KeyboardAvoidingView 
             style={styles.container}
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={100}
         >
-            {/* HEADER */}
             <Stack.Screen
                 options={{
-                    title: urgenceIntitule || 'Discussion',
+                    // 🚨 CHANGEMENT : Utilisation du titre Patient
+                    title: urgenceTitle || intituleUrgence || "Discussion",
                     headerStyle: { backgroundColor: '#58D68D' },
                     headerTintColor: '#fff',
+                    headerTitleStyle: { fontWeight: '600' },
                     headerLeft: () => (
                         <TouchableOpacity
                             onPress={() => router.back()}
-                            style={{ marginLeft: 8 }}
+                            style={styles.backButton}
                         >
                             <Ionicons name="arrow-back" size={24} color="#fff" />
                         </TouchableOpacity>
+                    ),
+                    headerRight: () => (
+                        <View style={styles.headerRight}>
+                            {priorite && (
+                                <View style={[
+                                    styles.priorityBadge,
+                                    { backgroundColor: getPriorityColor(priorite as string) }
+                                ]}>
+                                    <Text style={styles.priorityText}>
+                                        {priorite}
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
                     )
                 }}
             />
 
-            {/* MESSAGES */}
-            {isLoading ? (
-                <LoadingAnimation />
+            {load ? (
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#58D68D" />
+                    <Text style={styles.loadingText}>Chargement des messages...</Text>
+                </View>
             ) : (
-                <FlatList
-                    ref={flatListRef}
-                    data={messages}
-                    keyExtractor={item => item.idMessage}
-                    renderItem={({ item }) => (
-                        <RenderMessage
-                            item={item}
-                            selectedMessage={selectedMessage}
-                            setPreviewUri={setPreviewUri}
-                            setShowImagePreview={setShowImagePreview}
-                            setSelectedMessage={setSelectedMessage}
-                            setShowDeleteModal={setShowDeleteModal}
-                        />
-                    )}
-                    contentContainerStyle={styles.messagesListContent}
-                    onContentSizeChange={() =>
-                        flatListRef.current?.scrollToEnd({ animated: true })
-                    }
-                    ListEmptyComponent={
-                        <View style={styles.emptyMessagesContainer}>
-                            <Ionicons
-                                name="chatbubble-outline"
-                                size={64}
-                                color="#BDC3C7"
-                            />
-                            <Text style={styles.emptyMessagesText}>
-                                Aucun message pour l'instant
-                            </Text>
-                            <Text style={styles.emptyMessagesSubText}>
-                                Commencez la conversation
-                            </Text>
+                <>
+                    <MessageList 
+                        messages={discussions} 
+                        userRole={userRole}
+                        currentUserId={currentUserId}
+                        onRetry={retryMessage}
+                    />
+
+                    {isOtherUserTyping && (
+                        <View style={{flexDirection:'row', justifyContent:'flex-start', marginBottom: 8, paddingLeft:8, backgroundColor:'transparent'}}>
+                            <View style={styles.typingIndicator}>
+                                <TypingIndicator dotColor="#2E86C1" dotSize={8} />
+                            </View>
                         </View>
-                    }
-                />
+                    )} 
+                    
+                    <MessageInput 
+                        onSend={sendMessage} 
+                        id={id?.toString() || ''} 
+                        userRole={userRole} 
+                        socket={socket} 
+                    />
+                </>
             )}
-
-
-            {isOtherUserTyping && (
-                <View style={styles.typingIndicator}>
-                    <Text style={styles.typingText}>L'établissement est en train d'écrire</Text>
-                    <TypingIndicator dotColor="#2E86C1" dotSize={8} />
-                </View>
-            )}
-
-
-
-
-            {/* MEDIA OPTIONS */}
-            {showMediaOptions && (
-                <View
-                    style={[
-                        styles.mediaOptionsContainer,
-                        { bottom: Platform.OS === 'ios' ? 70 + keyboardHeight : 70 }
-                    ]}
-                >
-                    <TakePhoto sendMediaMessage={sendMediaMessage} setShowMediaOptions={setShowMediaOptions} />
-                    <PickImage sendMediaMessage={sendMediaMessage} setShowMediaOptions={setShowMediaOptions} />
-                    <PickVideo sendMediaMessage={sendMediaMessage} setShowMediaOptions={setShowMediaOptions} />
-                    <PickDocument sendMediaMessage={sendMediaMessage} setShowMediaOptions={setShowMediaOptions} />
-                </View>
-            )}
-
-            {/* RECORDING BAR */}
-            {isRecording ? (
-                <View style={styles.recordingBar}>
-                    <View style={styles.recordingIndicator}>
-                        <Animated.View
-                            style={[
-                                styles.recordingDot,
-                                { transform: [{ scale: pulseAnim }] }
-                            ]}
-                        />
-                        <Text style={styles.recordingText}>
-                            {formatDuration(recordingDuration)}
-                        </Text>
-                    </View>
-
-                    <View style={styles.recordingActions}>
-                        <TouchableOpacity onPress={cancelRecording} style={styles.recordingButton}>
-                            <Ionicons name="close" size={28} color="#FF3B30" />
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            onPress={stopRecording}
-                            style={[styles.recordingButton, styles.sendRecordingButton]}
-                        >
-                            <Ionicons name="send" size={24} color="#fff" />
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            ) : (
-                /** INPUT BAR **/
-                <View style={styles.inputWrapper}>
-                    <View style={styles.inputContainer}>
-                        <TouchableOpacity
-                            style={styles.mediaButton}
-                            onPress={() => setShowMediaOptions(!showMediaOptions)}
-                            disabled={isSending}
-                        >
-                            <Ionicons
-                                name={showMediaOptions ? 'close' : 'add'}
-                                size={26}
-                                color={isSending ? '#CCC' : '#007AFF'}
-                            />
-                        </TouchableOpacity>
-
-                        <TextInput
-                            ref={inputRef}
-                            style={styles.input}
-                            placeholder="Écrivez un message..."
-                            placeholderTextColor="#999"
-                            value={inputText}
-                            onChangeText={handleTyping}
-                            onFocus={() => setShowMediaOptions(false)}
-                            multiline
-                            editable={!isSending}
-                        />
-
-                        {isSending ? (
-                            <ActivityIndicator size="small" color="#007AFF" />
-                        ) : inputText.trim() ? (
-                            <TouchableOpacity
-                                style={[styles.actionButton, styles.sendButton]}
-                                onPress={sendTextMessage}
-                            >
-                                <Ionicons name="send" size={20} color="#fff" />
-                            </TouchableOpacity>
-                        ) : (
-                            <TouchableOpacity
-                                style={[styles.actionButton, styles.micButton]}
-                                onPress={startRecording}
-                            >
-                                <Ionicons name="mic" size={22} color="#007AFF" />
-                            </TouchableOpacity>
-                        )}
-                    </View>
-                </View>
-            )}
-
-            {/* IMAGE PREVIEW */}
-            <ShowImagePreview 
-                showImagePreview={showImagePreview} 
-                setShowImagePreview={setShowImagePreview} 
-                previewUri={previewUri}
-            />
-
-            {/* DELETE MODAL */}
-            <DeleteMessage
-                showDeleteModal={showDeleteModal}
-                cancelDelete={cancelDelete}
-                deleteMessage={deleteMessage}
-            />
         </KeyboardAvoidingView>
-    );
+    )
 }
 
-/** ---------------------------------------------------------
- *  STYLES (IDENTIQUES)
- * --------------------------------------------------------*/
+function getPriorityColor(priorite: string): string {
+    switch (priorite.toLowerCase()) {
+        case 'haute':
+        case 'urgente':
+            return '#e74c3c'
+        case 'moyenne':
+            return '#f39c12'
+        case 'basse':
+            return '#3498db'
+        default:
+            return '#95a5a6'
+    }
+}
+
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f8f9fa'
+        backgroundColor: '#f5f7fa',
     },
-    messagesListContent: {
-        paddingVertical: 12,
-        paddingBottom: 20
+    backButton: {
+        marginLeft: 8,
+        padding: 4
     },
-    emptyMessagesContainer: {
-        marginTop: 100,
-        alignItems: 'center',
-        paddingHorizontal: 40
+    headerRight: {
+        marginRight: 12,
+        flexDirection: 'row',
+        alignItems: 'center'
     },
-    emptyMessagesText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#7F8C8D',
-        marginTop: 16
-    },
-    emptyMessagesSubText: {
-        fontSize: 13,
-        color: '#95A5A6',
-        marginTop: 8
-    },
-
-    /** Input bar */
-    inputWrapper: {
+    priorityBadge: {
         paddingHorizontal: 12,
-        paddingBottom: Platform.OS === 'ios' ? 32 : 12,
-        paddingTop: 8,
-        backgroundColor: '#fff',
-        borderTopWidth: 1,
-        borderTopColor: '#E8E8E8'
-    },
-    inputContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#F5F5F5',
-        borderRadius: 24,
-        paddingHorizontal: 8,
         paddingVertical: 6,
-        minHeight: 44
+        borderRadius: 12
     },
-    input: {
+    priorityText: {
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: '700',
+        textTransform: 'uppercase'
+    },
+    loadingContainer: {
         flex: 1,
-        fontSize: 15,
-        maxHeight: 100,
-        paddingHorizontal: 8,
-        paddingVertical: 8
-    },
-    mediaButton: {
-        width: 36,
-        height: 36,
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 2
+        backgroundColor: '#f5f7fa'
     },
-    actionButton: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginLeft: 4
-    },
-    sendButton: {
-        backgroundColor: '#007AFF'
-    },
-    micButton: {
-        backgroundColor: '#E8E8E8'
-    },
-
-    /** Media options */
-    mediaOptionsContainer: {
-        position: 'absolute',
-        bottom: 70,
-        left: 16,
-        right: 16,
-        marginBottom: 12,
-        backgroundColor: '#fff',
-        borderRadius: 20,
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        paddingVertical: 16,
-        paddingHorizontal: 8,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -3 },
-        shadowOpacity: 0.15,
-        shadowRadius: 8,
-        elevation: 8
-    },
-
-    /** Recording bar */
-    recordingBar: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: 12,
-        backgroundColor: '#F5F5F5',
-        borderRadius: 24,
-        marginHorizontal: 4,
-        marginBottom: 32,
-    },
-    recordingIndicator: {
-        flexDirection: 'row',
-        alignItems: 'center'
-    },
-    recordingDot: {
-        width: 10,
-        height: 10,
-        borderRadius: 5,
-        backgroundColor: '#FF3B30',
-        marginRight: 12
-    },
-    recordingText: {
-        fontSize: 16,
-        color: '#333',
-        fontWeight: '600',
-        fontVariant: ['tabular-nums']
-    },
-    recordingActions: {
-        flexDirection: 'row',
-        alignItems: 'center'
-    },
-    recordingButton: {
-        marginLeft: 16,
-        backgroundColor: '#fff',
-        borderRadius: 24,
-        padding: 8,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3
-    },
-    sendRecordingButton: {
-        backgroundColor: '#007AFF'
+    loadingText: {
+        marginTop: 12,
+        fontSize: 14,
+        color: '#7f8c8d'
     },
     typingIndicator: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: 16,
         paddingVertical: 8,
-        backgroundColor: '#F0F0F0',
+        borderBottomEndRadius:8,
+        borderTopLeftRadius:8,
+        backgroundColor: '#fab346',
     },
-    typingText: {
-        fontSize: 13,
-        color: '#666',
-        fontStyle: 'italic',
-        marginRight: 8,
-    },
-    lottieTyping: {
-        width: 50,
-        height: 30,
-    },
-
-});
+})

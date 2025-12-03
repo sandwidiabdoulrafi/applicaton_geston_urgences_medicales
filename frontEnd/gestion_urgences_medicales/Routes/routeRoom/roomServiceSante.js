@@ -1,13 +1,17 @@
 import db from './dbRoom';
 
+// ================================
+// Création propre de la table SERVICE SANTE
+// ================================
+
 export async function initServiceSante() {
     try {
         db.execSync(`
             CREATE TABLE IF NOT EXISTS ServiceSante (
-                idService INTEGER PRIMARY KEY,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                idService TEXT UNIQUE NOT NULL,
                 nomEtablissement TEXT NOT NULL,
                 email TEXT,
-                motDePasse TEXT,
                 telephone TEXT,
                 typeEtablissement TEXT,
                 adresse TEXT,
@@ -25,13 +29,17 @@ export async function initServiceSante() {
             );
         `);
 
-        db.execSync(`
-            CREATE INDEX IF NOT EXISTS idx_services_location 
-            ON ServiceSante(latitude, longitude, isActive);
-        `);
-
-        console.log("✅ Table 'ServiceSante' créée/vérifiée avec succès");
+        console.log("✅ Table ServiceSante créée !");
     } catch (error) {
         console.error("❌ Erreur création table ServiceSante:", error);
     }
 }
+
+
+
+
+
+        // Supprimer proprement
+        // db.execSync(`
+        //     DROP TABLE IF EXISTS ServiceSante;
+        // `);

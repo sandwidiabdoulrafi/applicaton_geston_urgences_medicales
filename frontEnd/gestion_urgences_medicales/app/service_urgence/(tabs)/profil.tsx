@@ -26,7 +26,6 @@ export default function Profil() {
     const [refreshing, setRefreshing] = useState<boolean>(false);
     const [service, setService] = useState<ServiceSante | null>(null);
     const [error, setError] = useState<string | null>(null);
-    const [notificationsEnabled, setNotificationsEnabled] = useState(true);
     
     const {signOut} = useAuth()
 

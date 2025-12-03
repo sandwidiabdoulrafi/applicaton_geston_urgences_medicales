@@ -2,25 +2,24 @@ import db from './dbRoom';
 
 export async function initMessages() {
     try {
+    
+
         db.execSync(`
             CREATE TABLE IF NOT EXISTS Messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                idMessage TEXT UNIQUE NOT NULL,
-                idUrgence INTEGER NOT NULL,
+                idUrgence TEXT NOT NULL,
+                sender TEXT NOT NULL CHECK(sender IN ('patient','service')),
                 text TEXT,
-                type TEXT NOT NULL,
+                type TEXT NOT NULL CHECK(type IN ('text', 'image', 'video', 'document', 'audio')),
                 uri TEXT,
                 fileName TEXT,
                 duration REAL,
-                sender TEXT NOT NULL,
                 timestamp TEXT NOT NULL,
-                status TEXT DEFAULT 'envoi',
-                FOREIGN KEY (idUrgence) REFERENCES Urgences(id) ON DELETE CASCADE,
-                CHECK (type IN ('text', 'image', 'video', 'document', 'audio')),
-                CHECK (sender IN ('patient', 'assistant')),
-                CHECK (status IN ('envoi', 'envoye', 'erreur', 'lu'))
+                status TEXT DEFAULT 'envoi' CHECK(status IN ('envoi', 'envoye', 'erreur', 'lu')),
+                idTmp TEXT UNIQUE
             );
         `);
+        
 
         db.execSync(`
             CREATE INDEX IF NOT EXISTS idx_messages_urgence 
@@ -34,40 +33,6 @@ export async function initMessages() {
     }
 }
 
-/**
- * Valide que l'ID est un entier positif valide
- */
-function validateId(id) {
-    const numId = parseInt(id, 10);
-    if (isNaN(numId) || numId <= 0 || !Number.isInteger(numId)) {
-        throw new Error(`ID invalide: ${id}`);
-    }
-    return numId;
-}
-
-/**
- * Valide le texte d'un message
- */
-function validateMessageText(text, maxLength = 5000) {
-    if (typeof text !== 'string') {
-        throw new Error('Le texte doit être une chaîne de caractères');
-    }
-    if (text.length > maxLength) {
-        throw new Error(`Le texte dépasse la longueur maximale de ${maxLength} caractères`);
-    }
-    return text.trim();
-}
-
-/**
- * Valide le type de message
- */
-function validateMessageType(type) {
-    const validTypes = ['text', 'image', 'video', 'document', 'audio'];
-    if (!validTypes.includes(type)) {
-        throw new Error(`Type de message invalide: ${type}`);
-    }
-    return type;
-}
 
 /**
  * Récupère uniquement les urgences qui ont au moins une discussion
@@ -76,7 +41,7 @@ export async function getUrgencesAvecDiscussions() {
     try {
         const result = db.getAllSync(`
             SELECT 
-                U.id AS idUrgence,
+                U.idUrgence,
                 U.intitule,
                 U.description,
                 U.statut,
@@ -87,37 +52,36 @@ export async function getUrgencesAvecDiscussions() {
                 S.typeEtablissement,
                 S.telephone,
                 S.email,
+                COUNT(M.id) as messageCount,
                 MAX(M.timestamp) AS dernierMessage
             FROM Urgences U
-            INNER JOIN Messages M ON U.id = M.idUrgence
-            LEFT JOIN ServiceSante S ON U.idAssistant = S.idAssistant
-            GROUP BY U.id, U.intitule, U.description, U.statut, U.priorite, 
-                     U.idAssistant, U.idPatient,
-                     S.nomEtablissement, S.typeEtablissement, S.telephone, S.email
-            ORDER BY dernierMessage DESC;
+            LEFT JOIN Messages M ON U.idUrgence = M.idUrgence
+            LEFT JOIN ServiceSante S ON U.idAssistant = S.idService
+            GROUP BY U.idUrgence
+            HAVING messageCount > 0
+            ORDER BY dernierMessage DESC
         `);
 
-        console.log(`✅ ${result.length} urgence(s) avec discussion(s) récupérée(s)`);
-        return result || [];
+        return {success: true, data: result || []};
+
     } catch (error) {
         console.error("❌ Erreur lors de la récupération des urgences:", error);
-        return [];
+        return {success: false, data: []};
     }
 }
 
-
 /**
- * Récupère les messages d'une urgence (SÉCURISÉ avec paramètres bindés)
+ * Récupère les messages d'une urgence 
  */
 export async function getMessagesByUrgence(idUrgence) {
     try {
-        // Validation de l'ID
-        const validId = validateId(idUrgence);
+
+        // db.execAsync("DELETE FROM Messages");
+
         
-        // Utilisation de requête préparée avec paramètres bindés
         const messages = db.getAllSync(
             `SELECT 
-                idMessage,
+                id,
                 idUrgence,
                 text,
                 type,
@@ -126,105 +90,121 @@ export async function getMessagesByUrgence(idUrgence) {
                 duration,
                 sender,
                 timestamp,
-                status
+                status,
+                idTmp
             FROM Messages
             WHERE idUrgence = ?
             ORDER BY timestamp ASC`,
-            [validId]
+            [idUrgence]
         );
-        
-        return messages || [];
+
+        return{ success: true, data: messages || [] };
+
     } catch (error) {
         console.error("❌ Erreur récupération messages:", error);
-        return [];
+        return  { success: false, data: [] };
     }
 }
 
+
 /**
- * Ajoute un nouveau message (SÉCURISÉ)
+ * Ajoute un message
  */
-export async function addMessage(messageData) {
+export async function addMessage(message) {
     try {
-        // Validation des données
-        const validId = validateId(messageData.idUrgence);
-        const validType = validateMessageType(messageData.type);
+
+        // await db.execAsync(`
+        //     ALTER TABLE Messages ADD COLUMN idTmp TEXT;
+        // `);
         
-        if (messageData.type === 'text' && messageData.text) {
-            messageData.text = validateMessageText(messageData.text);
-        }
-        
-        // Génération d'un ID unique si non fourni
-        const idMessage = messageData.idMessage || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        
-        // Insertion avec paramètres bindés
-        const result = db.runSync(
-            `INSERT INTO Messages (
-                idMessage, idUrgence, text, type, uri, fileName, 
-                duration, sender, timestamp, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        const result = await db.runAsync(
+            `
+            INSERT INTO Messages (
+                idUrgence,
+                sender,
+                text,
+                type,
+                uri,
+                fileName,
+                duration,
+                timestamp,
+                status,
+                idTmp
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?,?)
+        `,
             [
-                idMessage,
-                validId,
-                messageData.text || null,
-                validType,
-                messageData.uri || null,
-                messageData.fileName || null,
-                messageData.duration || null,
-                messageData.sender,
-                messageData.timestamp || new Date().toISOString(),
-                messageData.status || 'envoi'
+                message.idUrgence,
+                message.sender,
+                message.text ?? null,
+                message.type,
+                message.uri ?? null,
+                message.fileName ?? null,
+                message.duration ?? null,
+                message.timestamp,
+                message.status ?? "envoi",
+                message.idTmp
             ]
         );
-        
-        return {
-            success: true,
-            idMessage,
-            insertedId: result.lastInsertRowId
-        };
+
+        console.log("💬 Message sauvegardé, ID inséré:", result.lastInsertRowId)
+        return { success: true,id: result.lastInsertRowId };
+
     } catch (error) {
-        console.error("❌ Erreur ajout message:", error);
-        return { success: false, error: error.message };
+        console.error("❌ Erreur lors de l'ajout du message :", error);
+        return { success: false, error };
     }
 }
 
+
 /**
- * Met à jour le statut d'un message (SÉCURISÉ)
+ * Met à jour le statut d'un message
  */
-export async function updateMessageStatus(idMessage, newStatus) {
+// Dans roomMessages.js (ou serviceSanteRoomService.js)
+
+export async function updateMessageStatus(id, newStatus) {
+
+    console.log(" dans partie patient sante id", id); 
+
     try {
-        const validStatuses = ['envoi', 'envoye', 'erreur', 'lu'];
-        if (!validStatuses.includes(newStatus)) {
-            throw new Error(`Statut invalide: ${newStatus}`);
+        // La méthode runAsync retourne un objet résultat
+        const result = await db.runAsync( 
+            `UPDATE Messages SET status = ? WHERE idTmp = ?`,
+            [newStatus, id]
+        );
+
+        // ✅ Vérification du nombre de lignes modifiées (changes)
+        if (result && result.changes > 0) {
+            console.log(`📌 Statut message ${id} → ${newStatus}. Lignes affectées: ${result.changes}`);
+            return { success: true, changes: result.changes };
+        } else {
+            // Cela signifie que l'idTmp n'a pas été trouvé (0 lignes modifiées)
+            console.warn(`⚠️ Mise à jour échouée: idTmp ${id} non trouvé dans la DB.`);
+            return { success: false, reason: "No row updated", changes: 0 };
         }
-        
-        const result = db.runSync(
-            `UPDATE Messages 
-            SET status = ? 
-            WHERE idMessage = ?`,
-            [newStatus, idMessage]
-        );
-        
-        return { success: true, changes: result.changes };
+
     } catch (error) {
-        console.error("❌ Erreur mise à jour statut:", error);
-        return { success: false, error: error.message };
+        console.error("❌ Erreur updateMessageStatus :", error);
+        return { success: false, error };
     }
 }
 
+
 /**
- * Supprime un message (SÉCURISÉ)
+ * Supprime un message 
  */
-export async function deleteMessage(idMessage) {
+export async function deleteMessage(id) {
     try {
-        const result = db.runSync(
-            `DELETE FROM Messages WHERE idMessage = ?`,
-            [idMessage]
+        await db.runAsync(
+            `DELETE FROM Messages WHERE id = ?`,
+            [id]
         );
-        
-        return { success: true, deleted: result.changes > 0 };
+
+        console.log(`🗑️ Message supprimé : ${id}`);
+        return { success: true };
+
     } catch (error) {
-        console.error("❌ Erreur suppression message:", error);
-        return { success: false, error: error.message };
+        console.error("❌ Erreur deleteMessage :", error);
+        return { success: false, error };
     }
 }
 
@@ -235,10 +215,4 @@ export default {
     addMessage,
     updateMessageStatus,
     deleteMessage,
-    validateId,
-    validateMessageText,
-    validateMessageType
 };
-
-
-

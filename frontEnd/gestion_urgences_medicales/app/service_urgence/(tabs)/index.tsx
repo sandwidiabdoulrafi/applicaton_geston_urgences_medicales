@@ -68,7 +68,6 @@ export default function HomeScreen() {
             console.log(`✅ [INDEX] Urgence supprimée de la liste\n`);
         };
     
-        console.log("📝 [INDEX] Enregistrement listener removeUrgenceFromList");
         socketServiceSanter.on("removeUrgenceFromList", handleRemoveFromList);
     
         return () => {
@@ -156,8 +155,7 @@ export default function HomeScreen() {
     
         fetchUrgences();
 
-        // 🔵 2. REJOINDRE LA ROOM Socket.IO
-        socketServiceSant.emit("join_room", "services_sante");
+
 
         // 🟢 3. ÉCOUTER LES NOUVELLES URGENCES EN TEMPS RÉEL
         socketServiceSant.on("urgence:added", async(data) => {

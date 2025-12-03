@@ -23,6 +23,8 @@ export default function UrgenceDetailPage() {
         useFocusEffect(
             useCallback(() => {
                 loadUrgenceDetails();
+
+                
                 
             }, [])
         );
@@ -51,7 +53,7 @@ export default function UrgenceDetailPage() {
 
 
     const delete_urgence = async (urgenceId, idLocal) => {
-
+        console.log(`idUrgence = ${urgenceId} et maitenant idLocal = ${idLocal} `);
         Alert.alert(
             "Confirmation",
             "Êtes-vous sûr de vouloir supprimer cette urgence ? Cette action est irréversible.",
@@ -181,7 +183,9 @@ export default function UrgenceDetailPage() {
             pathname: '/patient/chat/[id]',
             params:{
                 id:urgence.id,
-                intituleUrgence: urgence.intitule
+                idUrgence:urgence.idUrgence,
+                intituleUrgence: urgence.intitule,
+                priorite: urgence.priorite
 
             }
         })
@@ -350,17 +354,24 @@ export default function UrgenceDetailPage() {
 
             {/* Actions */}
 
-            <View style={styles.actionsContainer}>
-                <TouchableOpacity 
-                    style={styles.actionButtonMsg}
-                    onPress={handleNavigateDiscution}
-                >
-                    <Ionicons name="chatbubbles-outline" size={20} color="#007AFF" />
-                    <Text style={[styles.actionButtonText, { color: '#007AFF' }]}>
-                        Discuter avec le service d’intervention 
-                    </Text>
-                </TouchableOpacity>
-            </View>
+            
+
+            {urgence.statut !=='en_attente' && (
+                <View style={styles.actionsContainer}>
+                    <TouchableOpacity 
+                        style={styles.actionButtonMsg}
+                        onPress={handleNavigateDiscution}
+                    >
+                        <Ionicons name="chatbubbles-outline" size={20} color="#007AFF" />
+                        <Text style={[styles.actionButtonText, { color: '#007AFF' }]}>
+                            Discuter avec le service d’intervention 
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+            )}
+
+                
+            
 
             <View style={styles.actionsContainer}>
                 

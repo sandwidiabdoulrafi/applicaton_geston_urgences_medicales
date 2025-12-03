@@ -27,7 +27,6 @@ const createUrgence = async (dataForm) => {
             ...dataForm,
         });
 
-       
         // Étape 2 : sauvegarder localement dans Room
 
         const urgenceData = response.data?.data; // 🔹 seulement "data"
@@ -40,7 +39,7 @@ const createUrgence = async (dataForm) => {
         }
 
         
-        return { success: true, data: response.data };
+        return { success: true, data: response.data.data };
     } catch (error) {
         console.error("❌ Erreur lors de la création de l'urgence :", error.message);
 

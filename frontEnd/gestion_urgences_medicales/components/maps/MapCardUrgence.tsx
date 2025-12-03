@@ -146,7 +146,7 @@ export default function MapCardUrgence({ listeToShow, showDetail }) {
           
           return (
             <Marker
-              key={urgence.id}
+              key={urgence.idUrgence}
               coordinate={{
                 latitude: urgence.latitude,
                 longitude: urgence.longitude,

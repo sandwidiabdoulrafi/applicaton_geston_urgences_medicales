@@ -22,11 +22,14 @@ export default function DetailUrgence({ modalVisible, closeModal, urgence }) {
     const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
     const [load ,setLoad] = useState(false)
     const [userService, setUserService] = useState([]);
+    
+    
+    
     const panResponder = useRef(
     PanResponder.create({
         onStartShouldSetPanResponder: () => true,
         onMoveShouldSetPanResponder: (_, gestureState) => {
-        return gestureState.dy > 5; // Seulement si glissement vers le bas
+        return gestureState.dy > 5; 
         },
         onPanResponderMove: (_, gestureState) => {
         if (gestureState.dy > 0) {
@@ -130,7 +133,9 @@ export default function DetailUrgence({ modalVisible, closeModal, urgence }) {
                 }
 
                 //sauvegarde dans le room 
+                
                 console.log("⚠️ sauvergarde dans  room depuis DetailUrgence : ", urgence);
+                urgence.idAssistant = idService;
                 urgence.statut = "en_cours"
                 await serviceSanteRoomService.addUrgence(urgence)
                 cleanup();

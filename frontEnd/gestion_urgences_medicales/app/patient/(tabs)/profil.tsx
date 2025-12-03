@@ -20,6 +20,7 @@ export default function Profil() {
         return String(value);
     };
 
+
     useEffect(() => {
         loadPatient();
     }, []);
@@ -27,6 +28,8 @@ export default function Profil() {
     const loadPatient = async () => {
         try {
             const patients = await roomPatient.getUserPatient();
+
+            console.log("\n\n l'utilisateur inscrit avec ses informations : ", patients);
 
             if (patients && patients.length > 0) {
                 console.log("\n\n l'utilisateur inscrit avec ses informations : ", patients);

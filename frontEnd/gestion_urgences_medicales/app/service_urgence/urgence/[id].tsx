@@ -13,12 +13,13 @@ import React, { useEffect, useState } from 'react';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { UrgenceComplet } from '@/types/urgenceType';
-import { getUrgenceById } from '@/Routes/routeRoom/serviceSanteRoomService';
+import { getPatientById, getUrgenceById } from '@/Routes/routeRoom/serviceSanteRoomService';
 
 export default function DetailUrgenceService() {
     const { id } = useLocalSearchParams();
     const router = useRouter();
     const [urgence, setUrgence] = useState<UrgenceComplet | null>(null);
+    const [patient, setPatient] = useState();
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -27,8 +28,22 @@ export default function DetailUrgenceService() {
             try {
                 setLoading(true);
                 setError(null);
-                const response = await getUrgenceById(id);
-                setUrgence(response);
+                
+                
+                // Récupérer l'urgence
+                const urgenceResponse = await getUrgenceById(id);
+                if (urgenceResponse) {
+                    setUrgence(urgenceResponse);
+
+                    // Récupérer le patient à partir de l'urgence récupérée
+                    const patientResponse = await getPatientById(urgenceResponse.idPatient);
+                    if (patientResponse) {
+                        console.log("patient : ", patientResponse)
+                        setPatient(patientResponse);
+                    }
+                }
+                
+                
             } catch (err) {
                 console.error("Erreur lors du chargement de l'urgence:", err);
                 setError("Impossible de charger les détails de l'urgence");
@@ -142,36 +157,6 @@ export default function DetailUrgenceService() {
         });
     };
 
-    // Fonction pour appeler
-    const makePhoneCall = () => {
-        if (!urgence?.telephonePatient) {
-            Alert.alert(
-                'Numéro indisponible',
-                'Aucun numéro de téléphone n\'est associé à ce patient.'
-            );
-            return;
-        }
-
-        const phoneNumber = `tel:${urgence.telephonePatient}`;
-        
-        Linking.canOpenURL(phoneNumber)
-            .then((supported) => {
-                if (supported) {
-                    return Linking.openURL(phoneNumber);
-                } else {
-                    Alert.alert(
-                        'Erreur',
-                        'Impossible d\'effectuer l\'appel sur cet appareil'
-                    );
-                }
-            })
-            .catch(() => {
-                Alert.alert(
-                    'Erreur',
-                    'Une erreur s\'est produite lors de l\'appel'
-                );
-            });
-    };
 
     // Fonction pour naviguer vers la discussion
     const goToDiscussion = () => {
@@ -399,6 +384,67 @@ export default function DetailUrgenceService() {
                                 <Ionicons name="map-outline" size={18} color="#14B8A6" />
                                 <Text style={styles.mapButtonText}>Voir sur la carte</Text>
                             </TouchableOpacity>
+                        </View>
+                    </View>
+                )}
+
+
+                {/*  plus d'information du patient  */}
+                {patient && (
+                    <View style={styles.card}>
+                        <View style={styles.cardHeader}>
+                            <Ionicons name="person-circle" size={20} style={styles.iconPatient} />
+                            <Text style={styles.cardTitle}>Informations Patient</Text>
+                        </View>
+
+                        <View style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>Nom:</Text>
+                            <Text style={styles.infoValue}>{patient.nom} {patient.prenom}</Text>
+                        </View>
+
+                        <View style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>Email:</Text>
+                            <Text style={styles.infoValue}>{patient.email}</Text>
+                        </View>
+
+                        <View style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>Téléphone:</Text>
+                            <Text style={styles.infoValue}>{patient.telephone}</Text>
+                        </View>
+
+                        <View style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>Date de naissance:</Text>
+                            <Text style={styles.infoValue}>{patient.dateNaissance}</Text>
+                        </View>
+
+                        <View style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>Lieu de résidence:</Text>
+                            <Text style={styles.infoValue}>{patient.lieuResidence}</Text>
+                        </View>
+
+                        <View style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>Groupe sanguin:</Text>
+                            <Text style={styles.infoValue}>{patient.groupeSanguin}</Text>
+                        </View>
+
+                        <View style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>Poids:</Text>
+                            <Text style={styles.infoValue}>{patient.poids} kg</Text>
+                        </View>
+
+                        <View style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>Taille:</Text>
+                            <Text style={styles.infoValue}>{patient.taille} cm</Text>
+                        </View>
+
+                        <View style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>Maladie chronique:</Text>
+                            <Text style={styles.infoValue}>{patient.maladieChronique === "1" ? "Oui" : "Non"}</Text>
+                        </View>
+
+                        <View style={styles.infoRow}>
+                            <Text style={styles.infoLabel}>Numéro d'urgence:</Text>
+                            <Text style={styles.infoValue}>{patient.numeroUrgence}</Text>
                         </View>
                     </View>
                 )}

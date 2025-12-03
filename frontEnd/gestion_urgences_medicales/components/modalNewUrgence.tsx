@@ -7,8 +7,7 @@ import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import urgenceService from '../Routes/routeService/urgenceService'
 import AsyncStorage from '@react-native-async-storage/async-storage';
-// import roomPatient from '@/Routes/routeRoom/roomPatient';
-// import socket from "../Routes/socket/socketClient"
+
 
 // Schéma de validation Yup
 const urgenceSchema = yup.object().shape({
@@ -50,7 +49,8 @@ interface ModalProps {
 export default function ModalNewUrgence({ modalVisible, closeModal }: ModalProps) {
     const [loadingLocation, setLoadingLocation] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [userPatient, setUserPatient] = useState<string | null>(null);
+    const [userPatient, setUserPatient] = useState<any>(null);
+    
 
     // Animation pour le swipe
     const translateY = useRef(new Animated.Value(0)).current;
@@ -60,15 +60,15 @@ export default function ModalNewUrgence({ modalVisible, closeModal }: ModalProps
         const loadPatient = async () => {
             try {
                 const stored = await AsyncStorage.getItem("userPatient");
-    
                 if (stored !== null) {
                     const parsed = JSON.parse(stored);
                     console.log("Données récupérées : ", parsed);
-                    setUserPatient(parsed); 
+                    // Si c'est un tableau, prendre le premier élément
+                    setUserPatient(Array.isArray(parsed) ? parsed[0] : parsed); 
                 } else {
                     console.log("Aucune donnée userPatient trouvée dans le stockage.");
                 }
-                // J'ai supprimé le deuxième JSON.parse(stored) qui était ici et causait des soucis
+                
             } catch (e) {
                 console.log("Erreur récupération patient :", e);
             }
@@ -93,9 +93,16 @@ export default function ModalNewUrgence({ modalVisible, closeModal }: ModalProps
             dateHeure: new Date(),
             latitude: undefined,
             longitude: undefined,
-            idPatient:userPatient?.idPatient || "P_001",
         },
     });
+
+    // Définir idPatient une fois userPatient chargé
+    useEffect(() => {
+        if (userPatient?.idPatient) {
+            setValue('idPatient', userPatient.idPatient);
+            console.log("idPatient défini : ", userPatient.idPatient);
+        }
+    }, [userPatient, setValue]);
 
     const latitude = watch('latitude');
     const longitude = watch('longitude');
@@ -176,22 +183,44 @@ export default function ModalNewUrgence({ modalVisible, closeModal }: ModalProps
         setIsSubmitting(true);
         
         try {
+            // Ajouter l'idPatient aux données avant l'envoi
+            const dataToSubmit = {
+                ...data,
+                idPatient: userPatient?.idPatient
+            };
 
-            await urgenceService.createUrgence(data);
+            console.log("Données envoyées : ", dataToSubmit);
+
+            const response = await urgenceService.createUrgence(dataToSubmit);
+
+            if (response.success) {
+                Alert.alert(
+                    'Succès', 
+                    'Urgence signalée avec succès', 
+                    [
+                        { 
+                            text: 'OK', 
+                            onPress: () => {
+                                handleClose();
+                            }
+                        }
+                    ]
+                );
+            } else {
+                Alert.alert(
+                    'Erreur', 
+                    "Erreur lors du signalée de l'urgence", 
+                    [
+                        { 
+                            text: 'OK',
+                        }
+                    ]
+                );
+            }
+            
             
 
-            Alert.alert(
-                'Succès', 
-                'Urgence signalée avec succès', 
-                [
-                    { 
-                        text: 'OK', 
-                        onPress: () => {
-                            handleClose();
-                        }
-                    }
-                ]
-            );
+            
             
         } catch (error) {
             console.error('Erreur lors de l\'enregistrement:', error);

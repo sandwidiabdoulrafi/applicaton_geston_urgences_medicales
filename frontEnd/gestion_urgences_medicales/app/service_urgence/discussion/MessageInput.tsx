@@ -1,19 +1,75 @@
 import { View, TextInput, TouchableOpacity, StyleSheet } from 'react-native'
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Ionicons } from '@expo/vector-icons'
+import { Socket } from 'socket.io-client'
 
 interface MessageInputProps {
     onSend: (text: string) => void
+    id: string
+    userRole: 'patient' | 'service',
+    socket :Socket
+
 }
 
-export default function MessageInput({ onSend }: MessageInputProps) {
+export default function MessageInput({ id, userRole, onSend, socket }: MessageInputProps) {
     const [text, setText] = useState('')
+    const [isTyping, setIsTyping] = useState(false)
+
+    // ✅ Émettre le signal typing quand l'utilisateur tape
+    useEffect(() => {
+        
+        if (text.trim().length > 0 && !isTyping) {
+            setIsTyping(true)
+            socket.emit("user:typing", { 
+                idUrgence: id, 
+                isTyping: true, 
+                sender: userRole 
+            })
+            console.log("✍️ Émission typing=true", { id, userRole })
+        } else if (text.trim().length === 0 && isTyping) {
+            setIsTyping(false)
+            socket.emit("user:typing", { 
+                idUrgence: id, 
+                isTyping: false, 
+                sender: userRole 
+            })
+            console.log("✍️ Émission typing=false", { id, userRole })
+        }
+    }, [text, id, userRole, isTyping])
+
+    // ✅ Arrêter le typing après 3 secondes d'inactivité
+    useEffect(() => {
+        if (!isTyping) return
+
+        const timeout = setTimeout(() => {
+            setIsTyping(false)
+            socket.emit("user:typing", { 
+                idUrgence: id, 
+                isTyping: false, 
+                sender: userRole 
+            })
+            console.log("⏱️ Timeout - typing=false", { id, userRole })
+        }, 3000)
+
+        return () => clearTimeout(timeout)
+    }, [text, isTyping, id, userRole])
 
     const handleSend = () => {
-        if (text.trim()) {
-            onSend(text)
-            setText('')
+        if (!text.trim()) return
+        
+        // ✅ Arrêter le typing avant d'envoyer
+        if (isTyping) {
+            socket.emit("user:typing", { 
+                idUrgence: id, 
+                isTyping: false, 
+                sender: userRole 
+            })
+            setIsTyping(false)
+            console.log("📤 Envoi message - typing=false", { id, userRole })
         }
+        
+        onSend(text)
+        setText('')
     }
 
     return (
@@ -57,8 +113,9 @@ const styles = StyleSheet.create({
         backgroundColor: '#fff',
         borderTopWidth: 1,
         borderTopColor: '#e0e0e0',
-        paddingHorizontal: 12,
-        paddingVertical: 8
+        paddingHorizontal: 12, 
+        paddingVertical: 8,
+        marginBottom: 14
     },
     inputContainer: {
         flexDirection: 'row',

@@ -1,8 +1,7 @@
-import { View, Text, TouchableOpacity, FlatList, ActivityIndicator, StyleSheet } from 'react-native'
+import { View, Text, TouchableOpacity, FlatList, ActivityIndicator, StyleSheet, TextInput, Platform } from 'react-native'
 import React, { useEffect, useState } from 'react'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { getServicesAvecUrgence } from '@/Routes/routeRoom/serviceSanteRoomService'
-import SearchBarre from '@/components/searchBarre'
 import { Ionicons } from '@expo/vector-icons'
 
 export interface messageListItem {
@@ -30,10 +29,22 @@ export default function Discussion() {
             setLoad(true)
             try {
                 const response = await getServicesAvecUrgence()
-                setListDiscussion(response || [])
-                setFilteredList(response || [])
+                
+                // CORRECTION: Vérifier que response.data existe et est un tableau
+                if (response.success && response.data && Array.isArray(response.data)) {
+                    console.log("Données reçues:", response.data.length, "éléments")
+                    setListDiscussion(response.data)
+                    // Petit délai pour éviter que SearchBarre écrase avec []
+                    setTimeout(() => setFilteredList(response.data), 100)
+                } else {
+                    console.log("Aucune donnée valide reçue")
+                    setListDiscussion([])
+                    setFilteredList([])
+                }
             } catch (error) {
                 console.error("Erreur lors de la récupération de la liste de discussion : ", error)
+                setListDiscussion([])
+                setFilteredList([])
             } finally {
                 setLoad(false)
             }
@@ -42,7 +53,11 @@ export default function Discussion() {
     }, [])
 
     const handleSearchResults = (results: messageListItem[]) => {
-        setFilteredList(results)
+        console.log("Résultats de recherche:", results.length)
+        // Ne mettre à jour que si results n'est pas vide OU si c'est une vraie recherche
+        if (results.length > 0 || listeDiscussion.length > 0) {
+            setFilteredList(results)
+        }
     }
 
     const formatTimestamp = (timestamp?: string | null) => {
@@ -66,6 +81,7 @@ export default function Discussion() {
         switch (priorite?.toLowerCase()) {
             case 'haute':
             case 'urgente':
+            case 'vitale':  // AJOUT: pour gérer "vitale" de vos données
                 return '#e74c3c'
             case 'moyenne':
                 return '#f39c12'
@@ -76,6 +92,9 @@ export default function Discussion() {
         }
     }
 
+
+    
+
     const getStatusBadge = (statut?: string | null) => {
         const status = statut?.toLowerCase()
         let bgColor = '#95a5a6'
@@ -83,8 +102,10 @@ export default function Discussion() {
 
         switch (status) {
             case 'en cours':
+            case 'en_cours':  // AJOUT: pour gérer "en_cours" de vos données
             case 'active':
                 bgColor = '#3498db'
+                text = 'En cours'
                 break
             case 'résolue':
             case 'terminée':
@@ -117,13 +138,15 @@ export default function Discussion() {
     }
 
     const renderDiscussionItem = ({ item }: { item: messageListItem }) => {
+
+
         const statusBadge = getStatusBadge(item.statut)
         const messageIcon = getMessageTypeIcon(item.lastMessageType)
 
         return (
             <TouchableOpacity
-                onPress={() => router.push({
-                    pathname: '/chat/[id]',
+            onPress={() => router.push({
+                    pathname: '/service_urgence/discussion/[id]',
                     params: { 
                         id: item.idUrgence,
                         intitule: item.intitule || 'Urgence',
@@ -210,6 +233,9 @@ export default function Discussion() {
         )
     }
 
+    // AJOUT: Log pour déboguer
+    console.log("État actuel - load:", load, "filteredList:", filteredList.length, "listeDiscussion:", listeDiscussion.length)
+
     return (
         <View style={styles.container}>
             <Stack.Screen
@@ -243,7 +269,7 @@ export default function Discussion() {
                 <FlatList
                     data={filteredList}
                     renderItem={renderDiscussionItem}
-                    keyExtractor={(item) => item.idUrgence}
+                    keyExtractor={(item) => item.idUrgence.toString()}
                     contentContainerStyle={styles.listContent}
                     showsVerticalScrollIndicator={false}
                 />
@@ -383,5 +409,106 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#7f8c8d',
         textAlign: 'center'
-    }
+    },
+    searchContaint: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#f1f1f1',
+        borderColor: '#ddd',
+        borderWidth: 1,
+        borderRadius: 10,
+        paddingHorizontal: 10,
+        margin: 8,
+        height: 48,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 1,
+        elevation: 2,
+    },
+    icon: { marginRight: 8 },
+    input: {
+        flex: 1,
+        fontSize: 16,
+        fontWeight: '500',
+        color: '#333',
+        paddingVertical: Platform.OS === 'ios' ? 8 : 4,
+    },
 })
+
+
+function SearchBarre({ placeholder, listeToSearch = [], onResults, keySearch }) {
+    const [searchText, setSearchText] = useState('');
+
+    useEffect(() => {
+        if (!listeToSearch || !Array.isArray(listeToSearch)) {
+            onResults && onResults([]);
+            return;
+        }
+
+        const text = searchText.toLowerCase().trim();
+
+        // Si le texte de recherche est vide, retourner toute la liste
+        if (text === '') {
+            onResults && onResults(listeToSearch);
+            return;
+        }
+
+        const filtered = listeToSearch.filter(item => {
+            // Si c'est une chaîne simple
+            if (typeof item === 'string') {
+                return item.toLowerCase().includes(text);
+            }
+
+            // Si c'est un objet
+            if (typeof item === 'object' && item !== null) {
+                // Si keySearch est un tableau de clés
+                if (Array.isArray(keySearch)) {
+                    return keySearch.some(key => {
+                        const value = item[key];
+                        if (value === null || value === undefined) return false;
+                        return String(value).toLowerCase().includes(text);
+                    });
+                }
+                
+                // Si keySearch est une chaîne unique
+                if (keySearch && item[keySearch]) {
+                    return String(item[keySearch]).toLowerCase().includes(text);
+                }
+
+                // Si pas de keySearch, chercher dans toutes les propriétés de type string
+                return Object.values(item).some(value => {
+                    if (typeof value === 'string') {
+                        return value.toLowerCase().includes(text);
+                    }
+                    return false;
+                });
+            }
+            
+            return false;
+        });
+
+        onResults && onResults(filtered);
+    }, [searchText, listeToSearch, keySearch]);
+
+    return (
+        <View style={styles.searchContaint}>
+            <Ionicons name="search" size={20} color="#888" style={styles.icon} />
+            <TextInput
+                value={searchText}
+                onChangeText={setSearchText}
+                placeholder={placeholder}
+                placeholderTextColor="#888"
+                style={styles.input}
+                autoCorrect={false}
+                keyboardType="default"
+            />
+            {searchText.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchText('')}>
+                    <Ionicons name="close-circle" size={20} color="#999" />
+                </TouchableOpacity>
+            )}
+        </View>
+    );
+}
+

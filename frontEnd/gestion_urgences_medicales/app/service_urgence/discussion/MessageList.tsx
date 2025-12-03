@@ -3,25 +3,34 @@ import React from 'react'
 import { Ionicons } from '@expo/vector-icons'
 
 interface Message {
-    id: number
-    idMessage: string
-    idEmeteur: number
+    id: number,
+    idUrgence: string,
     sender: 'patient' | 'service'
     text?: string
+    type: 'text' | 'image' | 'video' | 'document' | 'audio'
+    uri?: string
+    fileName?: string
+    duration?: number
     timestamp: string
-    status: 'envoi' | 'envoye' | 'erreur' | 'lu'
+    status: 'envoi' | 'envoye' | 'erreur' | 'lu',
+    idTmp?: string
 }
 
 interface MessageListProps {
     messages: Message[]
     userRole: 'patient' | 'service'
     currentUserId: number
-    onRetry?: (messageId: string) => void
+    onRetry?: (id: number) => void
 }
 
-export default function MessageList({ messages, userRole, currentUserId, onRetry }: MessageListProps) {
+export default function MessageList({ messages, userRole, onRetry }: MessageListProps) {
+
+
+
+
+
     const renderMessage = ({ item }: { item: Message }) => {
-        const isMyMessage = item.idEmeteur === currentUserId
+        const isMyMessage = item.sender === userRole
         
         return (
             <View style={[
@@ -48,20 +57,21 @@ export default function MessageList({ messages, userRole, currentUserId, onRetry
                         {isMyMessage && (
                             <View style={styles.statusContainer}>
                                 {item.status === 'envoi' && (
-                                    <Ionicons name="time-outline" size={14} color="#bdc3c7" />
+                                    <Ionicons name="time-outline" size={16} color="#1A1A1A" />
                                 )}
                                 {item.status === 'envoye' && (
-                                    <Ionicons name="checkmark-done" size={14} color="#3498db" />
+                                    <Ionicons name="checkmark-done" size={14} color="#0B3D91" />
                                 )}
                                 {item.status === 'lu' && (
-                                    <Ionicons name="checkmark-done" size={14} color="#27ae60" />
+                                    <Ionicons name="checkmark-done" size={14} color="#1A1A1A" />
                                 )}
                                 {item.status === 'erreur' && (
-                                    <TouchableOpacity onPress={() => onRetry?.(item.idMessage)}>
-                                        <Ionicons name="alert-circle" size={14} color="#e74c3c" />
+                                    <TouchableOpacity onPress={() => onRetry?.(item.id)}>
+                                        <Ionicons name="alert-circle" size={14} color="#C0392B" />
                                     </TouchableOpacity>
                                 )}
                             </View>
+
                         )}
                     </View>
                 </View>
@@ -73,7 +83,7 @@ export default function MessageList({ messages, userRole, currentUserId, onRetry
         <FlatList
             data={messages}
             renderItem={renderMessage}
-            keyExtractor={(item) => item.idMessage}
+            keyExtractor={(item) => item.id.toString()}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
             inverted={false}

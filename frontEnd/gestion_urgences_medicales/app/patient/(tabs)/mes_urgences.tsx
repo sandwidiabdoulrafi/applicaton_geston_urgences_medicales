@@ -6,6 +6,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet} from 'react-native';
 import RoutesRoom from '../../../Routes/routeRoom/roomUrgences';
 import LoadingAnimation from '@/components/LoadingAnimation';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 
 export default function Mes_urgences() {
@@ -15,16 +16,30 @@ export default function Mes_urgences() {
     const [isLoad, setIsLoad] = useState(false);
     const [urgencesParStatut, setUrgencesParStatut] = useState([]); 
     const [urgencesAffichees, setUrgencesAffichees] = useState([]); 
-
+    const [userPatient, setUserPatient] = useState<any>(null);
+    
+    
 
     useFocusEffect(
         useCallback(() => {
             const fetchUrgences = async () => {
                 setIsLoad(true);
                 try {
-                    const idPatient = 1;
-                    const userUrgence = await RoutesRoom.getUrgencesByPatient(idPatient);
-                    setUrgences(userUrgence);
+                    const stored = await AsyncStorage.getItem("userPatient");
+    
+                    if (stored !== null) {
+                        const parsed = JSON.parse(stored);
+                        const user = Array.isArray(parsed) ? parsed[0] : parsed;
+    
+                        // On met à jour l'état
+                        setUserPatient(user);
+    
+                        
+                        const userUrgence = await RoutesRoom.getUrgencesByPatient(user.idPatient);
+    
+                        setUrgences(userUrgence);
+                    }
+    
                 } catch (error) {
                     console.log("Erreur lors de la récupération des urgences :", error);
                 } finally {
@@ -36,7 +51,7 @@ export default function Mes_urgences() {
     
         }, [])
     );
-
+    
 
 
 

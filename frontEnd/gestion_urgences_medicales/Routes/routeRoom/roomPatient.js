@@ -8,7 +8,6 @@ import { v4 as uuidv4 } from 'uuid';
 export async function initPatient() {
     try {
         // Création de la table Patient
-        db.execSync(`DROP TABLE IF EXISTS Patient;`);
         db.execSync(`
             CREATE TABLE IF NOT EXISTS Patient (
                 id INTEGER PRIMARY KEY,

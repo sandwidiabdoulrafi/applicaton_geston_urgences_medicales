@@ -5,8 +5,7 @@ import { useRouter } from 'expo-router';
 
 export default function RenderItemUrgence({item}) {
 
-    console.log("\n\n\n\n\t ++=+=+=====-=-=-=-=-====--  rendeur item Urgence item  : ", item)
-
+    console.log("\n\\n\n item : ", item);
 
     const router = useRouter();
 
@@ -37,8 +36,7 @@ export default function RenderItemUrgence({item}) {
         router.push({
             pathname: '/patient/urgences/[id]',
             params: { 
-                id: item.id,
-                // urgenceData: JSON.stringify(item)
+                id: item.idUrgence,
             }
         });
     }
@@ -65,7 +63,11 @@ export default function RenderItemUrgence({item}) {
                     { color: statutStyle.color, backgroundColor: statutStyle.backgroundColor },
                     ]}
                 >
-                    {item.statut}
+                    {item.statut
+                        .toLowerCase()                
+                        .replace(/_/g, " ")           
+                        .replace(/^\w/, c => c.toUpperCase()) 
+                    }
                 </Text>
 
                 <View style={styles.dateContainer}>

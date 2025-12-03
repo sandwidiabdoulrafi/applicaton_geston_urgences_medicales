@@ -1,6 +1,9 @@
 // 📄 routePath.js
 const ENDPOINT = `http://192.168.1.132:5000`; 
 
+// const ENDPOINT = `http://192.168.11.220:5000`; 
+
+
 // 🔹 Urgences
 const URGENCE = `${ENDPOINT}/urgences`;
 export const ADD_URGENCE = `${URGENCE}/add`;

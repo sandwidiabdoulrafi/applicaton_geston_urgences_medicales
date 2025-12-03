@@ -1,7 +1,6 @@
 // serviceSanteRoomService.js
 import dbServiceSante from './serviceSanteRoom';
 import 'react-native-get-random-values';
-import { v4 as uuidv4 } from 'uuid';
 
 /* ------------------------- 🔹 INITIALISER LA TABLE ------------------------- */
 export async function initServiceSante() {
@@ -44,10 +43,13 @@ export async function initServiceSante() {
                 dateCreation TEXT,
                 dateIntervention TEXT,
                 latitude REAL,
-                longitude REAL
+                longitude REAL,
+                idTmp TEXT UNIQUE
             );
 
         `);
+
+        
 
         dbServiceSante.execSync(`
             CREATE TABLE IF NOT EXISTS Patients (
@@ -68,16 +70,13 @@ export async function initServiceSante() {
                 role TEXT DEFAULT 'patient'
             );
         `);
-        dbServiceSante.execSync(`
-    DROP TABLE IF EXISTS Messages;
-`);
+//         dbServiceSante.execSync(`
+//     DROP TABLE IF EXISTS Messages;
+// `);
         dbServiceSante.execSync(`
             CREATE TABLE IF NOT EXISTS Messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 idUrgence TEXT NOT NULL,
-                idMessage TEXT UNIQUE NOT NULL,
-                idEmeteur INTEGER NOT NULL,
-                idRecepteur INTEGER NOT NULL,
                 sender TEXT NOT NULL CHECK(sender IN ('patient','service')),
                 text TEXT,
                 type TEXT NOT NULL CHECK(type IN ('text', 'image', 'video', 'document', 'audio')),
@@ -89,6 +88,10 @@ export async function initServiceSante() {
             );
 
         `);
+
+
+
+
 
         console.log("✅ Table ServiceSante créée/vérifiée");
 
@@ -512,7 +515,7 @@ export async function addPatient(patient) {
 export async function getPatientById(idPatient) {
     try {
         const patient = await dbServiceSante.getFirstAsync(
-            `SELECT * FROM Patients WHERE id = ? LIMIT 1`,
+            `SELECT * FROM Patients WHERE idPatient = ? LIMIT 1`,
             [idPatient]
         );
         
@@ -559,14 +562,17 @@ export async function deletePatient(idPatient) {
 //-_-_-_-_-_-_-_-_-_-_-_-_-_-____Message____-_-_-_-_-_-_-_-_-_-_-_-_-_-
 
 
+
 export async function addNewMessage(message) {
+
+
+    console.log(" +=+=+=_=_=_=-=-=-+_=-  • addNewMessage : message:", message);
+
     try {
-        await dbServiceSante.runAsync(
+        const update = await dbServiceSante.runAsync(
             `
             INSERT INTO Messages (
-                idMessage,
-                idEmeteur,
-                idRecepteur,
+                idUrgence,
                 sender,
                 text,
                 type,
@@ -574,13 +580,12 @@ export async function addNewMessage(message) {
                 fileName,
                 duration,
                 timestamp,
-                status
-            ) VALUES (?, ?,?, ?, ?, ?, ?, ?, ?, ?, ?)
+                status,
+                idTmp
+            ) VALUES (?, ?,?, ?, ?, ?, ?, ?, ?,?)
         `,
             [
-                message.idMessage,
-                message.idEmeteur,
-                message.idRecepteur,
+                message.idUrgence,
                 message.sender,
                 message.text ?? null,
                 message.type,
@@ -588,11 +593,15 @@ export async function addNewMessage(message) {
                 message.fileName ?? null,
                 message.duration ?? null,
                 message.timestamp,
-                message.status ?? "envoi"
+                message.status ?? "envoi",
+                message.idTmp ?? null,
             ]
         );
 
-        console.log("💬 Message sauvegardé :", message.idMessage);
+        const id = update?.lastID || message.idTmp; 
+        console.log("💬 Message sauvegardé, pas besoin de idFirebase car id est auto increnmental je choisie id  :", id);
+        
+        console.log("💬 Message sauvegardé ");
         return { success: true };
 
     } catch (error) {
@@ -606,33 +615,40 @@ export async function addNewMessage(message) {
 /**
  * 🟦 Mettre à jour le statut d’un message (envoye, lu, erreur…)
  */
-export async function updateMessageStatut(idMessage, newStatus) {
+export async function updateMessageStatut(idTmp, newStatus) {
+
+    console.log(":=;=;=;=;=;==::::::::::::::::::: dans partie Service sante idTmp", idTmp); // id est l'ID réel du message (BDD/Firebase)
+
     try {
-        await dbServiceSante.runAsync(
-            `UPDATE Messages SET status = ? WHERE idMessage = ?`,
-            [newStatus, idMessage]
+        const result = await dbServiceSante.runAsync( 
+            // ✅ CORRECTION : Chercher par l'ID principal
+            `UPDATE Messages SET status = ? WHERE idTmp = ?`, 
+            [newStatus, idTmp]
         );
 
-        console.log(`📌 Statut message ${idMessage} → ${newStatus}`);
-        return { success: true };
-
+        if (result && result.changes > 0) {
+            console.log(`📌 Statut message ${idTmp} → ${newStatus}. Lignes affectées: ${result.changes}`);
+            return { success: true, changes: result.changes };
+        } else {
+            console.warn(`⚠️ Mise à jour échouée: ID ${idTmp} non trouvé dans la DB.`);
+            return { success: false, reason: "No row updated", changes: 0 };
+        }
     } catch (error) {
-        console.error("❌ Erreur updateMessageStatut :", error);
+        console.error("❌ Erreur updateMessageStatus :", error);
         return { success: false, error };
     }
 }
-
 /**
  * 🟥 Supprimer un message
  */
-export async function deleteMessageById(idMessage) {
+export async function deleteMessageById(id) {
     try {
         await dbServiceSante.runAsync(
-            `DELETE FROM Messages WHERE idMessage = ?`,
-            [idMessage]
+            `DELETE FROM Messages WHERE id = ?`,
+            [id]
         );
 
-        console.log(`🗑️ Message supprimé : ${idMessage}`);
+        console.log(`🗑️ Message supprimé : ${id}`);
         return { success: true };
 
     } catch (error) {
@@ -644,6 +660,9 @@ export async function deleteMessageById(idMessage) {
 
 export async function getAllMessageById(idUrgence) {
     try {
+
+        // dbServiceSante.execAsync("DELETE FROM Messages");
+
         const messages = await dbServiceSante.getAllSync(
             `
             SELECT 
@@ -672,7 +691,7 @@ export async function getServicesAvecUrgence() {
     try {
         const query = `
             SELECT 
-                u.id AS idUrgence,
+                u.idUrgence, 
                 u.intitule,
                 u.description,
                 u.priorite,
@@ -684,34 +703,34 @@ export async function getServicesAvecUrgence() {
                 m.sender AS lastMessageSender
             FROM Urgences u
             LEFT JOIN Messages m 
-                ON m.idUrgence = u.id
+                ON m.idUrgence = u.idUrgence 
                 AND m.timestamp = (
                     SELECT MAX(timestamp) 
                     FROM Messages 
-                    WHERE idUrgence = u.id
+                    WHERE idUrgence = u.idUrgence
                 )
             ORDER BY u.dateCreation DESC
         `;
 
         const urgences = await dbServiceSante.getAllSync(query);
 
-        return urgences; // Retourner directement le tableau
+        const urgencs = await dbServiceSante.getAllSync(`SELECT * FROM Urgences`);
+
+        return {success: true , data: urgences}; 
     } catch (error) {
         console.error("❌ Erreur récupération urgences avec dernier message :", error);
-        return []; // Retourner un tableau vide en cas d'erreur
+        return {success: false}; 
     }
 }
 
 
 
 export async function resetAndSaveLoginData(loginData) {
-    console.log("\n\\n\n\n\n\n\n\n\n   ===== loginData = ", loginData , "\n\\nn\n\\n\n\n\n")
 
 
 
-    console.log("\n\\n\n\n\n\n\n\n\n   ===== loginData.service = ", loginData.service, "\n\\nn\n\\n\n\n\n")
     try {
-        console.log("\n🔄 ===== DÉBUT RÉINITIALISATION ET SAUVEGARDE =====");
+        ;
         
         //  Vider toutes les tables
         await clearAllTables();
@@ -811,21 +830,18 @@ async function savePatientFromUrgence(patient) {
     }
 }
 
-async function saveMessagesFromUrgence(idUrgence, messages) {
+async function saveMessagesFromUrgence(messages) {
     try {
         console.log(` Sauvegarde de ${messages.length} message(s)...`);
         
         for (const message of messages) {
             await dbServiceSante.runAsync(
                 `INSERT INTO Messages (
-                    idMessage, idUrgence, idEmeteur, idRecepteur, sender,
+                    idUrgence,sender,
                     text, type, uri, fileName, duration, timestamp, status
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
-                    message.idMessage || uuidv4(),
-                    idUrgence,
-                    message.idEmeteur || '',
-                    message.idRecepteur || '',
+                    message.idUrgence,
                     message.sender || 'patient',
                     message.text || null,
                     message.type || 'text',
@@ -897,6 +913,16 @@ async function saveUrgencesFromLogin(urgences) {
     }
 }
 
+export const getAllUrgenceId = async()=>{
+    try {
+        const idUrgences = await dbServiceSante.getAllSync(`SELECT idUrgence FROM Urgences`)
+        return{success : true, data : idUrgences}
+    } catch (error) {
+        console.log("erreur lors de la recuperation des idUrgence");
+        return{success : fales}
+    }
+}
+
 
 
 
@@ -917,6 +943,7 @@ export default {
     deleteUrgence,
     getUrgenceById,
     updateStatusToAccep,
+    getAllUrgenceId,
 
     // ============Patients========
 

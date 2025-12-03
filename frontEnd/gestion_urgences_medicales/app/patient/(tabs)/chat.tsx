@@ -71,8 +71,11 @@ export default function Chat() {
     const loadDiscussions = async () => {
         try {
             setIsLoading(true);
-            const data = await roomMessages.getUrgencesAvecDiscussions();
-            setDiscussions(data);
+            const response = await roomMessages.getUrgencesAvecDiscussions();
+            if(response.success){
+                setDiscussions(response.data);
+            }
+            
         } catch (error) {
             console.error('Erreur chargement discussions:', error);
         } finally {
@@ -102,67 +105,13 @@ export default function Chat() {
         }
     };
 
-
-        /** ---------------------------------------------------------
-         *  SOCKET CONNECTION & LISTENERS
-         * --------------------------------------------------------*/
-        useEffect(() => {
-            console.log("📡 Connexion Socket globale");
-            socket.connect();
         
-            // ✅ Rejoindre toutes les salles des urgences
-            discussions.forEach(disc => {
-                socket.emit("message:joinRoom", disc.idUrgence);
-            });
-        
-            // 🔔 Écouter les nouveaux messages de TOUTES les salles
-            socket.on("message:new", async(msg) => {
-                
-                await playNotificationSound();
-                Vibration.vibrate(200);
-                console.log("📩 Nouveau message reçu:", msg);
-                
-                // Mettre à jour le badge de notification
-                setDiscussions(prev => prev.map(disc => 
-                    disc.idUrgence === msg.idUrgence 
-                        ? { ...disc, unreadCount: (disc.unreadCount || 0) + 1 }
-                        : disc
-                ));
-                
-                // Rafraîchir la liste si nécessaire
-                loadDiscussions();
-            });
-        
-            // 🔄 Statut changé
-            socket.on("message:statusChanged", ({ idUrgence, status }) => {
-                setDiscussions(prev => prev.map(disc =>
-                    disc.idUrgence === idUrgence 
-                        ? { ...disc, statut: status }
-                        : disc
-                ));
-            });
-
-        
-            return () => {
-                console.log("🔴 Déconnexion Socket");
-                discussions.forEach(disc => {
-                    socket.emit("message:leaveRoom", disc.idUrgence);
-                });
-                socket.off("connected");
-                socket.off("message:new");
-                socket.off("urgence:statusChanged");
-                socket.off("message:error");
-                socket.disconnect();
-            };
-        }, [discussions]);
-
-
-
-    const showDiscussion = (id: number, urgenceTitle: string) => {
+    const showDiscussion = (idUrgence, urgenceTitle: string) => {
         router.push({
             pathname: `/patient/chat/[id]`,
             params: {
-                id: id.toString(),
+                id: idUrgence, 
+                idUrgence:  idUrgence,
                 urgenceIntitule: urgenceTitle,
             },
         });
