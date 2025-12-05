@@ -40,7 +40,7 @@ export async function addNewUgenceLocal(idPatient, dataForm) {
 
 
     try {
-        //  Nouvelle API : runSync au lieu de transaction + executeSql
+       
         const result = db.runSync(
             `INSERT INTO Urgences 
             (idUrgence, idPatient, idAssistant, intitule, description, dateCreation, statut, priorite, latitude, longitude)
@@ -276,8 +276,6 @@ export const updateForAccptUrgence = async (data) => {
 
 
 
-
-// Export par défaut pour compatibilité avec les imports existants
 export default {
     initUrgences,
     addNewUgenceLocal,

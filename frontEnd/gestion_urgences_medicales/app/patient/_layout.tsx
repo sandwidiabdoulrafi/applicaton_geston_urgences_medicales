@@ -1,3 +1,4 @@
+import LoadPatientData from "../../Routes/routesBackend/LoadPatientData";
 import { getUserPatient } from '@/Routes/routeRoom/roomPatient';
 import { getAllUrgenceId, updateForAccptUrgence } from '@/Routes/routeRoom/roomUrgences';
 import socket from '@/Routes/socket/socketClient';
@@ -5,9 +6,10 @@ import socket from '@/Routes/socket/socketClient';
 import roomMessages, { addMessage } from '../../Routes/routeRoom/roomMessages.js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Audio } from 'expo-av';
-import { Vibration } from 'react-native';
+import { AppState, Vibration } from 'react-native';
 import { Stack } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
+import { useAuth } from "../contexts/AuthContext";
 
 
 interface Message {
@@ -91,6 +93,23 @@ export default function PatientLayout() {
 
         initializePatient();
     }, []);
+
+    const appState = useRef(AppState.currentState);
+    const {userRole, userId} = useAuth()
+    useEffect(() => {
+        const subscription = AppState.addEventListener("change", next => {
+            if(next ==='active'){
+                if (!userRole || !userId) return;
+
+                if (userRole === "patient") {
+                    console.log("📌 Rechargement PATIENT");
+                    LoadPatientData(userId);
+                }
+            }
+        });
+
+        return () => subscription.remove();
+    }, [userRole, userId]);
 
     // Gestion socket
     useEffect(() => {

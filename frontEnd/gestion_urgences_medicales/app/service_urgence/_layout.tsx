@@ -4,13 +4,20 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Stack } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Audio } from 'expo-av';
-import { Vibration } from 'react-native';
+import { AppState, Vibration } from 'react-native';
+import LoadServiceSantetData from "../../Routes/routesBackend/LoadServiceSantetData";
+import { useAuth } from '../contexts/AuthContext';
 
 export default function ServiceUrgenceLayout() {
     const [serviceSante, setServiceSante] = useState(null);
     const [allIdUrgences, setAllIdUrgences] = useState([]);
     const [isConnected, setIsConnected] = useState(false);
     const notificationSound = useRef<Audio.Sound>(null);
+
+
+    
+
+
 
     // ═══════════════════════════════════════════════════════════
     // 1️⃣ CHARGEMENT DU SON DE NOTIFICATION
@@ -40,6 +47,35 @@ export default function ServiceUrgenceLayout() {
             }
         };
     }, []);
+
+
+
+    const appState = useRef(AppState.currentState);
+    const { userRole, userId } = useAuth();
+
+    useEffect(() => {
+        const subscription = AppState.addEventListener("change", next => {
+
+            if(next === 'active'){
+                console.log("🔄 L'utilisateur revient sur l'app");
+
+                if (!userRole || !userId) return;
+                
+                if (userRole === "service") {
+                    console.log("📌 Rechargement SERVICE DE SANTÉ");
+                    LoadServiceSantetData(userId);
+                }
+            }
+        });
+
+        return () => subscription.remove();
+    }, [userRole, userId]);
+    
+
+
+
+
+
 
     const playNotificationSound = async () => {
         try {
@@ -282,7 +318,7 @@ export default function ServiceUrgenceLayout() {
             socketServiceSante.off("receiveMessage", handleNotifiMessage)
             // socketServiceSante.off('urgenceJoined', handleUrgenceJoined);
             
-           
+            
             socketServiceSante.off('succesAdd', handleSuccessAdd);
             socketServiceSante.off('urgenceStatusChanged', handleUrgenceChanged);
             socketServiceSante.off('patientInfoForService', handlePatientInfo);

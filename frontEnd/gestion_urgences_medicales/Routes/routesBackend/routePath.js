@@ -1,7 +1,7 @@
 // 📄 routePath.js
-const ENDPOINT = `http://192.168.1.132:5000`; 
+// const ENDPOINT = `http://192.168.1.132:5000`; 
 
-// const ENDPOINT = `http://192.168.11.220:5000`; 
+const ENDPOINT = `http://192.168.11.220:5000`; 
 
 
 // 🔹 Urgences
@@ -41,6 +41,26 @@ export const UPDATE_MESSAGE_STATUS = (idMessage) => `${MESSAGE}/${idMessage}`;
 export const UPLOAD_MEDIA_MESSAGE = `${MESSAGE}/upload`;
 export const DELETE_MESSAGE = (idMessage) => `${MESSAGE}/${idMessage}`;
 
+
+
+
+// Messages d'un utilisateur
+export const GET_ALL_MESSAGE_USER = (idUrgence) => `${MESSAGE}/message/${idUrgence}`;
+
+// Urgences d'un utilisateur
+export const GET_ALL_URGENCES_USER = (idUser) => `${URGENCE}/user/${idUser}`;
+
+// Services intervenant dans une urgence
+export const GET_SERVICES_IN_URGENCE = (idService) => `${SERVICE}/service/${idService}`;
+
+// Patients d’une urgence
+export const GET_PATIENTS_IN_URGENCE = (idUrgence) => `${PATIENT}/patient/${idUrgence}`;
+
+
+
+
+
+
 export default {
     ADD_URGENCE,
     DELETE_URGENCE,
@@ -64,4 +84,11 @@ export default {
     GET_MESSAGES_BY_URGENCE,
     UPDATE_MESSAGE_STATUS,
     DELETE_MESSAGE,
+
+
+
+    GET_ALL_MESSAGE_USER,
+    GET_ALL_URGENCES_USER,
+    GET_SERVICES_IN_URGENCE,
+    GET_PATIENTS_IN_URGENCE
 };

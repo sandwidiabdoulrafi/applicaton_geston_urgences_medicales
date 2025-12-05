@@ -7,6 +7,7 @@ import InitDB from '../Routes/routeRoom/index'
 import serviceSanteRoomService from '@/Routes/routeRoom/serviceSanteRoomService';
 
 export default function RootLayout() {
+    
 //intialisation des db lite
     useEffect(()=>{
         const charger = async()=>{

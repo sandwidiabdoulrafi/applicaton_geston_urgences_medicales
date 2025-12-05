@@ -116,7 +116,7 @@ function checkIfExists(idService) {
     }
 }
 
-/* ------------------------- 🔹 CREATE ------------------------- */
+/* -------------------------  CREATE ------------------------- */
 export async function createService(service) {
     try {
         
@@ -924,6 +924,24 @@ export const getAllUrgenceId = async()=>{
 }
 
 
+export const clearAllLocalServiceData = async () => {
+    try {
+        console.log("🧹 Suppression de toutes les données locales (ServiceSante)…");
+
+        await dbServiceSante.execAsync("DELETE FROM ServiceSantes;");
+        await dbServiceSante.execAsync("DELETE FROM Urgences;");
+        await dbServiceSante.execAsync("DELETE FROM Patients;");
+        await dbServiceSante.execAsync("DELETE FROM Messages;");
+
+        console.log("✅ Toutes les données locales ont été supprimées !");
+        return { success: true };
+
+    } catch (error) {
+        console.error("❌ Erreur clearAllLocalServiceData :", error);
+        return { success: false, error };
+    }
+};
+
 
 
 
@@ -962,5 +980,6 @@ export default {
     //+++++++++++ renitialisation de tout le donne car le login revient avec des info backend 
 
     resetAndSaveLoginData,
+    clearAllLocalServiceData
     
 };

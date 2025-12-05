@@ -391,58 +391,149 @@ async function savePatientMessages(idUrgence, messages) {
 /**
  * Sauvegarde les services de santé associés aux urgences
  */
-async function savePatientServices(services) {
+
+
+
+export async function savePatientServices(service) {
     try {
-        console.log(`Sauvegarde de ${services.length} service(s)...`);
         
-        for (const service of services) {
-            // Vérifier si le service existe déjà
-            const existing = await db.getFirstSync(
-                `SELECT idService FROM ServiceSante WHERE idService = ?`,
-                [service.idService]
-            );
+        
+        // Vérifier si le service existe déjà
+        const existing = await db.getFirstSync(
+            `SELECT idService FROM ServiceSante WHERE idService = ?`,
+            [service.idService]
+        );
+        
+        if (existing) {
+            console.log(`   ⚠️ Service "${service.nomEtablissement}" existe déjà, ignoré`);
+            return { status: "exists" };
             
-            if (existing) {
-                console.log(`   ⚠️ Service "${service.nomEtablissement}" existe déjà, ignoré`);
-                continue;
-            }
-            
-            await db.runAsync(
-                `INSERT INTO ServiceSante (
-                    idService, nomEtablissement, email, telephone, typeEtablissement,
-                    adresse, ville, latitude, longitude, heureOuverture,
-                    heureFermeture, ouvert24h, description, photoProfil,
-                    distance, isActive, lastUpdated
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [
-                    service.idService,
-                    service.nomEtablissement || '',
-                    service.email || '',
-                    service.telephone || '',
-                    service.typeEtablissement || '',
-                    service.adresse || '',
-                    service.ville || '',
-                    service.latitude || 0,
-                    service.longitude || 0,
-                    service.heureOuverture || '08:00',
-                    service.heureFermeture || '18:00',
-                    service.ouvert24h ? 1 : 0,
-                    service.description || '',
-                    service.photoProfil || '',
-                    service.distance || 0,
-                    service.isActive ? 1 : 0,
-                    service.lastUpdated || new Date().toISOString()
-                ]
-            );
-            
-            console.log(`   ✓ Service "${service.nomEtablissement}" sauvegardé`);
         }
+        
+        await db.runAsync(
+            `INSERT INTO ServiceSante (
+                idService, nomEtablissement, email, telephone, typeEtablissement,
+                adresse, ville, latitude, longitude, heureOuverture,
+                heureFermeture, ouvert24h, description, photoProfil,
+                distance, isActive, lastUpdated
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                service.idService,
+                service.nomEtablissement || '',
+                service.email || '',
+                service.telephone || '',
+                service.typeEtablissement || '',
+                service.adresse || '',
+                service.ville || '',
+                service.latitude || 0,
+                service.longitude || 0,
+                service.heureOuverture || '08:00',
+                service.heureFermeture || '18:00',
+                service.ouvert24h ? 1 : 0,
+                service.description || '',
+                service.photoProfil || '',
+                service.distance || 0,
+                service.isActive ? 1 : 0,
+                service.lastUpdated || new Date().toISOString()
+            ]
+        );
+        
+        console.log(`   ✓ Service "${service.nomEtablissement}" sauvegardé`);
+
+        return { status: "saved" };
+        
         
         console.log("✅ Tous les services sauvegardés\n");
         
     } catch (error) {
-        console.error("❌ Erreur savePatientServices:", error);
-        throw error;
+        console.log("❌ Erreur savePatientServices:", error);
+        
+        return { status: "error", error };
+    }
+}
+
+
+
+// ================================
+// 🧹 NETTOYAGE DES TABLES LOCALES
+// ================================
+
+/**
+ * Supprime toutes les données d'une table SQLite
+ * @param {string} tableName - Nom de la table à vider
+ * @returns {Promise<boolean>} - true si succès, false sinon
+ */
+export async function clearTable(tableName) {
+    if (!db) {
+        console.warn('⚠️ Base de données non disponible');
+        return false;
+    }
+
+    try {
+        console.log(`🧹 Suppression des données de la table: ${tableName}`);
+        
+        db.execSync(`DELETE FROM ${tableName}`);
+        
+        // Réinitialiser l'auto-increment (optionnel)
+        db.execSync(`DELETE FROM sqlite_sequence WHERE name='${tableName}'`);
+        
+        console.log(`✅ Table ${tableName} vidée avec succès`);
+        return true;
+    } catch (error) {
+        console.error(`❌ Erreur lors du nettoyage de ${tableName}:`, error);
+        return false;
+    }
+}
+
+/**
+ * Supprime toutes les données locales liées à une urgence
+ * @param {string} idUrgence - ID de l'urgence (optionnel)
+ */
+export async function clearMessagesForUrgence(idUrgence = null) {
+    if (!db) {
+        console.warn('⚠️ Base de données non disponible');
+        return false;
+    }
+
+    try {
+        if (idUrgence) {
+            console.log(`🧹 Suppression des messages pour l'urgence: ${idUrgence}`);
+            db.execSync(`DELETE FROM Messages WHERE idUrgence = ?`, [idUrgence]);
+        } else {
+            console.log(`🧹 Suppression de TOUS les messages`);
+            db.execSync(`DELETE FROM Messages`);
+        }
+        
+        console.log(`✅ Messages supprimés avec succès`);
+        return true;
+    } catch (error) {
+        console.error(`❌ Erreur suppression messages:`, error);
+        return false;
+    }
+}
+
+/**
+ * Nettoie toutes les données locales avant synchronisation
+ */
+export async function clearAllLocalData() {
+    if (!db) {
+        console.warn('⚠️ Base de données non disponible');
+        return false;
+    }
+
+    try {
+        console.log('🧹 Nettoyage complet des données locales...');
+        
+        // Supprimer dans l'ordre (respecter les contraintes de clés étrangères si existantes)
+        await clearTable('Messages');
+        await clearTable('Urgences');
+        await clearTable('ServiceSante');
+        
+        console.log('✅ Toutes les données locales ont été supprimées');
+        return true;
+    } catch (error) {
+        console.error('❌ Erreur lors du nettoyage complet:', error);
+        return false;
     }
 }
 
@@ -455,6 +546,7 @@ async function savePatientServices(services) {
 
 
 export default{
+    clearAllLocalData,
     logoutPatient,
     createPatient,
     getPatientByEmail,
@@ -463,6 +555,7 @@ export default{
     deletePatientAccount,
     loginPatient,
     getAllPatientsId,
-    resetAndSaveLoginDataPatient
+    resetAndSaveLoginDataPatient,
+    savePatientServices,
 }
 

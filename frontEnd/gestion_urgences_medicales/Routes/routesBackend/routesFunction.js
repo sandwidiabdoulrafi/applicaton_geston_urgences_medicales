@@ -1,6 +1,6 @@
 import axios from "axios"
 
-import { ADD_URGENCE, LOGOUT_PATIENT, CHANGE_PASSWORD_PATIENT, LOGOUT_SERVICE, CHANGE_PASSWORD, LOGIN_PATIENT, LOGIN_SERVICE, UPLOAD_MEDIA_MESSAGE, DELETE_URGENCE, UPDATE_URGENCE, GET_ALL_URGENCE, SERVICE_INTERVIENT, ADD_SERVICE, GET_ALL_SERVICE_PROXY, GET_SERVICE_BY_ID, UPDATE_SERVICE, DELETE_SERVICE, ADD_PATIENT, UPDATE_PATIENT, DELETE_PATIENT, GET_ALL_PATIENTS, ADD_MESSAGE, GET_MESSAGES_BY_URGENCE, UPDATE_MESSAGE_STATUS, DELETE_MESSAGE } from './routePath';
+import { ADD_URGENCE, LOGOUT_PATIENT, GET_ALL_URGENCES_USER, GET_SERVICES_IN_URGENCE,GET_PATIENTS_IN_URGENCE, GET_ALL_MESSAGE_USER, CHANGE_PASSWORD_PATIENT, LOGOUT_SERVICE, CHANGE_PASSWORD, LOGIN_PATIENT, LOGIN_SERVICE, UPLOAD_MEDIA_MESSAGE, DELETE_URGENCE, UPDATE_URGENCE, GET_ALL_URGENCE, SERVICE_INTERVIENT, ADD_SERVICE, GET_ALL_SERVICE_PROXY, GET_SERVICE_BY_ID, UPDATE_SERVICE, DELETE_SERVICE, ADD_PATIENT, UPDATE_PATIENT, DELETE_PATIENT, GET_ALL_PATIENTS, ADD_MESSAGE, GET_MESSAGES_BY_URGENCE, UPDATE_MESSAGE_STATUS, DELETE_MESSAGE } from './routePath';
 
 
 export const api = axios.create({
@@ -51,6 +51,25 @@ export const uploadMediaMessage = (data) => axios.post(UPLOAD_MEDIA_MESSAGE, dat
   });
 
 
+
+  // load data
+// Messages d'un utilisateur (patient ou service de santé)
+export const getAllMessageForUser = (idUrgence) => api.post(GET_ALL_MESSAGE_USER(idUrgence),{idUrgence: idUrgence});
+
+// Urgences d'un utilisateur (patient ou service de santé)
+export const getAllUrgencesForUser = (id, data) => api.post(GET_ALL_URGENCES_USER(id), data);
+
+// Services intervenant dans une urgence (pour le patient)
+export const getAllServiceInURgenceForPatient = (idService) =>
+  api.post(GET_SERVICES_IN_URGENCE(idService), {idService:idService});
+
+// Patients dans une urgence (pour le service de santé)
+export const getAllpatientInURgenceForSServiceSante = (idUrgence) =>
+  api.post(GET_PATIENTS_IN_URGENCE(idUrgence), {idUrgence:idUrgence});
+
+
+
+
 export default {
 
     createUrgence,
@@ -60,6 +79,11 @@ export default {
     getAllServicesProximity,
     serviceIntervient,
     loginService,
+
+    getAllpatientInURgenceForSServiceSante,
+    getAllServiceInURgenceForPatient,
+    getAllUrgencesForUser,
+    getAllMessageForUser,
 
     createService,
     getAllUrgences,
