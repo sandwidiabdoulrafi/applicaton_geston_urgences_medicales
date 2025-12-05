@@ -9,6 +9,9 @@ export default function MapCardUrgence({ listeToShow, showDetail }) {
   const [userService, setUserService] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
+console.log(" =q=q===q=q=q=q=q=  listeToShow  =  ",listeToShow)
+  
+
   // Fonction pour obtenir l'icône et la couleur selon la priorité
   const getMarkerConfig = (priorite: string) => {
     switch (priorite) {

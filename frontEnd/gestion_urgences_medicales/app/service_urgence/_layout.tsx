@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Stack } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Audio } from 'expo-av';
-import { AppState, Vibration } from 'react-native';
+import { ActivityIndicator, AppState, Vibration, View, Text } from 'react-native';
 import LoadServiceSantetData from "../../Routes/routesBackend/LoadServiceSantetData";
 import { useAuth } from '../contexts/AuthContext';
 
@@ -52,9 +52,10 @@ export default function ServiceUrgenceLayout() {
 
     const appState = useRef(AppState.currentState);
     const { userRole, userId } = useAuth();
+    const [isReloading, setIsReloading] = useState(false);
 
     useEffect(() => {
-        const subscription = AppState.addEventListener("change", next => {
+        const subscription = AppState.addEventListener("change", async next => {
 
             if(next === 'active'){
                 console.log("🔄 L'utilisateur revient sur l'app");
@@ -62,8 +63,18 @@ export default function ServiceUrgenceLayout() {
                 if (!userRole || !userId) return;
                 
                 if (userRole === "service") {
+                    
                     console.log("📌 Rechargement SERVICE DE SANTÉ");
-                    LoadServiceSantetData(userId);
+                    setIsReloading(true);
+                    // LoadServiceSantetData(userId);
+
+                    try {
+                        await LoadServiceSantetData(userId);
+                    } catch (error) {
+                        console.error("❌ Erreur rechargement:", error);
+                    } finally {
+                        setIsReloading(false); // ✅ Fin du chargement
+                    }
                 }
             }
         });
@@ -342,6 +353,21 @@ export default function ServiceUrgenceLayout() {
     // ═══════════════════════════════════════════════════════════
     // RENDER
     // ═══════════════════════════════════════════════════════════
+
+
+
+        if (!serviceSante || isReloading) {
+            return (
+                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                    <ActivityIndicator size="large" color="#007AFF" />
+                    <Text style={{ marginTop: 10 }}>
+                        {isReloading ? "Actualisation..." : "Chargement..."}
+                    </Text>
+                </View>
+            );
+        }
+
+
 
     if (!serviceSante) {
         return null; // Ou un écran de chargement

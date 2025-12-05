@@ -6,7 +6,7 @@ import socket from '@/Routes/socket/socketClient';
 import roomMessages, { addMessage } from '../../Routes/routeRoom/roomMessages.js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Audio } from 'expo-av';
-import { AppState, Vibration } from 'react-native';
+import { ActivityIndicator, AppState, Vibration, View, Text } from 'react-native';
 import { Stack } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from "../contexts/AuthContext";
@@ -96,14 +96,28 @@ export default function PatientLayout() {
 
     const appState = useRef(AppState.currentState);
     const {userRole, userId} = useAuth()
+    const [isReloading, setIsReloading] = useState(false);
+
     useEffect(() => {
-        const subscription = AppState.addEventListener("change", next => {
+        const subscription = AppState.addEventListener("change", async next => {
             if(next ==='active'){
                 if (!userRole || !userId) return;
 
                 if (userRole === "patient") {
                     console.log("📌 Rechargement PATIENT");
-                    LoadPatientData(userId);
+                    setIsReloading(true);
+                    // LoadPatientData(userId);
+
+
+                    try {
+                        await LoadPatientData(userId);
+                    } catch (error) {
+                        console.error("❌ Erreur rechargement:", error);
+                    } finally {
+                        setIsReloading(false); // ✅ Fin du chargement
+                    }
+
+
                 }
             }
         });
@@ -266,6 +280,27 @@ export default function PatientLayout() {
     if (!patient) {
         return null; 
     }
+
+
+
+
+
+
+
+
+    if (!patient || isReloading) {
+        return (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                <ActivityIndicator size="large" color="#007AFF" />
+                <Text style={{ marginTop: 10 }}>
+                    {isReloading ? "Actualisation..." : "Chargement..."}
+                </Text>
+            </View>
+        );
+    }
+
+
+
 
     return (
         <Stack 
