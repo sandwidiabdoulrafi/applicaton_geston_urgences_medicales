@@ -16,7 +16,7 @@ const addUrgence = async (req, res) => {
         if (!idPatient || !intitule || !latitude || !longitude) {
             const error = {
                 success: false,
-                message: "Champs obligatoires manquants (idUrgence, idPatient, intitule, latitude, longitude)"
+                message: "Champs obligatoires manquants (idPatient, intitule, latitude, longitude)"
             };
             
             console.log("❌ [http] Validation échouée :", error.message);
@@ -85,63 +85,60 @@ const addUrgence = async (req, res) => {
 
 
 const deleteUrgence = async (req, res) => {
-
-    console.log("🔵 http urgence demandant suppresion :", req.body);
+    console.log("🔵 http urgence demandant suppression :", req.body);
 
     try {
         const { idUrgence, idPatient } = req.body;
 
         if (!idUrgence || !idPatient) {
-
-            console.log("ID urgence ou patient manquant" , idUrgence ," idPatient :  ", idPatient);
+            console.log("ID urgence ou patient manquant", idUrgence, "idPatient :", idPatient);
             return res.status(400).json({ success: false, message: "ID urgence ou patient manquant" });
         }
 
         // Récupérer l'urgence
-        const urgencesQuery = await db.collection("urgences").where("idUrgence", "==", idUrgence).where("idPatient", "==", idPatient).get();
-    
+        const urgencesQuery = await db
+            .collection("urgences")
+            .where("idUrgence", "==", idUrgence)
+            .where("idPatient", "==", idPatient)
+            .get();
 
         if (urgencesQuery.empty) {
-
-            console.log("Urgence non trouvée" , urgenceDoc.exists);
+            console.log("❌ Urgence non trouvée avec idUrgence :", idUrgence);
             return res.status(404).json({ success: false, message: "Urgence non trouvée" });
         }
 
-         // Récupérer le premier document correspondant
-         const urgenceDoc = urgencesQuery.docs[0]; // QueryDocumentSnapshot
-         const urgenceData = urgenceDoc.data();     // Maintenant data() fonctionne
- 
+        // Récupérer le premier document correspondant
+        const urgenceDoc = urgencesQuery.docs[0];
+        const urgenceData = urgenceDoc.data();
 
-        // Vérifier que le patient est bien le propriétaire
+        // Vérifier le propriétaire
         if (urgenceData.idPatient !== idPatient) {
-
-            console.log('Vous ne pouvez supprimer que vos urgences');
+            console.log("❌ Tentative de suppression par un autre utilisateur");
             return res.status(403).json({ success: false, message: "Vous ne pouvez supprimer que vos urgences" });
         }
 
-        // Supprimer l'urgence
-        await db.collection("urgences").doc(idUrgence).delete();
+        // Supprimer dans Firestore
+        await db.collection("urgences").doc(urgenceDoc.id).delete();
 
-        // Notifier le patient + service (si assigné)
+        // Notifications socket.io
         const io = getIO();
         io.to(`urgence_${idUrgence}`).emit("urgence:deleted", {
             idUrgence,
             message: "Cette urgence a été supprimée par le patient"
         });
 
-        // Retirer de la liste globale des services
         io.to("services").emit("urgence:removed", { idUrgence });
 
-        console.log('Vous avez supprimer l urgences');
+        console.log("✔️ Urgence supprimée");
 
         return res.status(200).json({ success: true, message: "Urgence supprimée avec succès", idUrgence });
 
     } catch (error) {
         console.error("❌ Erreur lors de la suppression :", error);
-        
         return res.status(500).json({ success: false, message: "Erreur interne", error: error.message });
     }
 };
+
 
 
 
@@ -392,6 +389,63 @@ const getAllUrgence = async (req, res) => {
     }
 };
 
+// 📋 Récupérer toutes les urgences d'un utilisateur
+const getUrgencesForUser = async (req, res) => {
+    console.log("=/-=/=/=//=/=//=/=//=/=//=/= req.body = ", req.body)
+    try {
+        const { idUser, role } = req.body;
+        if (!idUser || !role) {
+
+            console.warn("⚠️ idUser et role sont obligatoires");
+
+            return res.status(400).json({
+                success: false, 
+                message: "idUser et role sont obligatoires" 
+            });
+        }
+
+        let snapshot;
+
+        if (role === "patient") {
+            // Récupérer toutes les urgences du patient
+            snapshot = await db
+                .collection("urgences")
+                .where("idPatient", "==", idUser)
+                .get();
+        } else if (role === "service") {
+            // Récupérer toutes les urgences assignées au service
+            snapshot = await db
+                .collection("urgences")
+                .where("idAssistant", "==", idUser)
+                .get();
+        } else {
+
+            console.warn("\n Role invalide, doit être 'patient' ou 'service'" )
+            return res.status(400).json({ 
+                success: false, 
+                message: "Role invalide, doit être 'patient' ou 'service'" 
+            });
+        }
+
+        const urgences = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        
+
+        return res.status(200).json({
+            success: true,
+            message: "Urgences récupérées avec succès",
+            data: urgences
+        });
+
+    } catch (error) {
+        console.error("❌ Erreur getUrgencesForUser :", error);
+        return res.status(500).json({
+            success: false,
+            message: "Erreur serveur",
+            error: error.message
+        });
+    }
+};
 
 
 
@@ -399,9 +453,7 @@ const getAllUrgence = async (req, res) => {
 
 
 
-
-
-module.exports = { addUrgence, deleteUrgence, updateUrgence, getAllUrgence, serviceIntervient};
+module.exports = { addUrgence, deleteUrgence, updateUrgence, getAllUrgence, serviceIntervient, getUrgencesForUser};
 
 
 

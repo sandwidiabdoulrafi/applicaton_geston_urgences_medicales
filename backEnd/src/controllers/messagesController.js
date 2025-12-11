@@ -156,10 +156,113 @@ const deleteMessage = async (req, res) => {
     }
 };
 
+
+
+
+
+
+
+
+
+
+const getAllMessageForUser = async (req, res) => {
+    console.log("\n===============================");
+    console.log("📥 getAllMessageForUser appelé");
+    console.log("===============================");
+
+    console.log("🔍 req.body :", req.body);
+
+    try {
+        const { idUrgence } = req.body;
+
+        if (!idUrgence) {
+            console.log("❌ idUrgence manquant");
+            return res.status(400).json({
+                success: false,
+                message: "idUrgence est obligatoire"
+            });
+        }
+
+        console.log("📁 Collection : messages");
+        console.log("⏳ Exécution de la requête Firestore...");
+
+        // Requête sans orderBy (pas besoin d'index)
+        const query = db
+            .collection("messages")
+            .where("idUrgence", "==", idUrgence);
+
+        const snapshot = await query.get();
+
+        console.log(`📩 Nombre de messages trouvés : ${snapshot.size}`);
+
+        // Tri côté serveur avec gestion flexible du timestamp
+        const messages = snapshot.docs
+            .map(doc => ({ id: doc.id, ...doc.data() }))
+            .sort((a, b) => {
+                // ✅ Gestion de différents formats de timestamp
+                let timeA, timeB;
+
+                // Si c'est un Firestore Timestamp
+                if (a.timestamp?.toMillis) {
+                    timeA = a.timestamp.toMillis();
+                }
+                // Si c'est un nombre (milliseconds)
+                else if (typeof a.timestamp === 'number') {
+                    timeA = a.timestamp;
+                }
+                // Si c'est une chaîne ISO
+                else if (typeof a.timestamp === 'string') {
+                    timeA = new Date(a.timestamp).getTime();
+                }
+                // Par défaut
+                else {
+                    timeA = 0;
+                }
+
+                // Même logique pour b
+                if (b.timestamp?.toMillis) {
+                    timeB = b.timestamp.toMillis();
+                }
+                else if (typeof b.timestamp === 'number') {
+                    timeB = b.timestamp;
+                }
+                else if (typeof b.timestamp === 'string') {
+                    timeB = new Date(b.timestamp).getTime();
+                }
+                else {
+                    timeB = 0;
+                }
+
+                return timeA - timeB; 
+            });
+
+        console.log("✅ Récupération et tri terminés avec succès.");
+
+        return res.status(200).json({
+            success: true,
+            message: "Messages récupérés avec succès",
+            data: messages
+        });
+
+    } catch (error) {
+        console.error("❌ Erreur getAllMessageForUser :", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Erreur serveur",
+            error: error.message
+        });
+    }
+};
+
+
+
+
 module.exports = {
     uploadMedia,
     addMessage,
     getMessagesByUrgence,
     updateMessageStatus,
     deleteMessage,
+    getAllMessageForUser,
 };

@@ -38,7 +38,7 @@ const io = initializeSocket(server, {
 app.set('io', io);
 
 // Configuration du port et de l'hôte
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5000;
 const HOST = process.env.HOST || '0.0.0.0';
 
 // Démarrage du serveur

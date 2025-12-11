@@ -60,7 +60,7 @@ app.use((req, res) => {
         path: req.path 
     });
 });
-
+    
 // ✅ Gestion des erreurs globales
 app.use((err, req, res, next) => {
     console.error('❌ Erreur serveur:', err);

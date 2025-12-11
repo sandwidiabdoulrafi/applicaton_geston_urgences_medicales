@@ -157,6 +157,7 @@ const addService = async (req, res) => {
     };
     
 
+
     const loginService = async (req, res) => {
         try {
             console.log("\n===== 🔵 LOGIN SERVICE =====");
@@ -167,7 +168,6 @@ const addService = async (req, res) => {
                 return res.status(400).json({ success: false, message: "Email et mot de passe requis" });
             }
     
-            // Recherche du service par email
             const snapshot = await db.collection("servicesSantes").where("email", "==", email).get();
     
             if (snapshot.empty) {
@@ -181,7 +181,6 @@ const addService = async (req, res) => {
                 return res.status(500).json({ success: false, message: "Mot de passe non défini pour ce service" });
             }
     
-            // Vérification du mot de passe
             const isMatch = await bcrypt.compare(motDePasse, service.motDePasse);
     
             if (!isMatch) {
@@ -189,12 +188,7 @@ const addService = async (req, res) => {
                 return res.status(401).json({ success: false, message: "Identifiants incorrects" });
             }
     
-            // Génération du JWT
-            const token = jwt.sign(
-                { idService: service.idService },
-                process.env.JWT_SECRET,
-                { expiresIn: "7d" }
-            );
+            const token = jwt.sign({ idService: service.idService }, process.env.JWT_SECRET, { expiresIn: "7d" });
     
             // Récupérer les urgences assignées à ce service
             const urgencesSnapshot = await db.collection("urgences")
@@ -205,26 +199,29 @@ const addService = async (req, res) => {
                 urgencesSnapshot.docs.map(async doc => {
                     let urgence = doc.data();
     
-                    // Messages liés à l'urgence
+                    // Messages liés à l'urgence (tri côté serveur)
                     const messageSnapshot = await db.collection("messages")
                         .where("idUrgence", "==", urgence.idUrgence)
-                        .orderBy("timestamp", "asc")
                         .get();
     
-                    urgence.messages = messageSnapshot.docs.map(m => m.data());
+                    urgence.messages = messageSnapshot.docs
+                        .map(m => m.data())
+                        .sort((a, b) => a.timestamp - b.timestamp);
     
                     // Patient lié à l'urgence
-                    const patientSnapshot = await db.collection("patients")
-                        .doc(urgence.idPatient)
-                        .get();
-    
-                    urgence.patient = patientSnapshot.exists ? patientSnapshot.data() : null;
+                    if (urgence.idPatient) {
+                        const patientSnapshot = await db.collection("patients")
+                            .doc(urgence.idPatient)
+                            .get();
+                        urgence.patient = patientSnapshot.exists ? patientSnapshot.data() : null;
+                    } else {
+                        urgence.patient = null;
+                    }
     
                     return urgence;
                 })
             );
     
-            
             const { motDePasse: _, ...serviceSafe } = service;
     
             console.log("===== ✅ LOGIN SERVICE RÉUSSI =====");
@@ -476,6 +473,47 @@ const changePasswordService = async (req, res) => {
     }
 };
 
+const getServicesForUrgence = async (req, res) => {
+    try {
+    const { idService } = req.body;
+    console.log("🔹 getServicesForUrgence appelé avec idService:", idService);
+    
+        if (!idService) {
+            console.warn("⚠️ idService manquant dans la requête");
+            return res.status(400).json({ success: false, message: "idService manquant" });
+        }
+    
+        // 🔹 Récupérer le service par le champ 'idService'
+        console.log(`📌 Recherche du service avec le champ idService = ${idService}...`);
+        const serviceQuery = await db.collection("servicesSantes")
+            .where("idService", "==", idService)
+            .get();
+    
+        let services = [];
+        if (!serviceQuery.empty) {
+            serviceQuery.forEach(doc => {
+                const serviceData = { id: doc.id, ...doc.data() };
+                services.push(serviceData);
+            });
+        } else {
+            console.warn(`⚠️ Aucun service trouvé avec idService = ${idService}`);
+        }
+    
+        return res.status(200).json({
+            success: true,
+            data: services
+        });
+    
+    } catch (error) {
+        console.error("❌ Erreur getServicesForUrgence :", error);
+        return res.status(500).json({
+            success: false,
+            message: "Erreur serveur lors de la récupération des services",
+            error: error.message
+        });
+    }
+};
+
 module.exports = { changePasswordService };
 
 
@@ -488,6 +526,7 @@ module.exports = {
     deleteService,
     getAllServices_proxy,
     getServiceById,
-    changePasswordService
+    changePasswordService,
+    getServicesForUrgence
 };
 

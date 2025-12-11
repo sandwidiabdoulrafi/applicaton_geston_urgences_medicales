@@ -77,7 +77,6 @@ const addPatient = async (req, res) => {
 };
 
 
-
 const loginPatient = async (req, res) => {
     try {
         console.log("\n===== 🔵 LOGIN PATIENT =====");
@@ -88,6 +87,7 @@ const loginPatient = async (req, res) => {
             return res.status(400).json({ success: false, message: "Email et mot de passe requis" });
         }
 
+        // Cherche le patient par email
         const snapshot = await db.collection("patients").where("email", "==", email).get();
 
         if (snapshot.empty) {
@@ -101,6 +101,7 @@ const loginPatient = async (req, res) => {
             return res.status(500).json({ success: false, message: "Mot de passe non défini pour cet utilisateur" });
         }
 
+        // Vérification du mot de passe
         const isMatch = await bcrypt.compare(motDePasse, patient.motDePasse);
 
         if (!isMatch) {
@@ -108,41 +109,59 @@ const loginPatient = async (req, res) => {
             return res.status(401).json({ success: false, message: "Identifiants incorrects" });
         }
 
+        // Création du token JWT
         const token = jwt.sign({ idPatient: patient.idPatient }, process.env.JWT_SECRET, { expiresIn: "7d" });
 
+        // Récupération des urgences du patient
         const urgencesSnapshot = await db.collection("urgences").where("idPatient", "==", patient.idPatient).get();
 
         const urgences = await Promise.all(
             urgencesSnapshot.docs.map(async doc => {
                 let urgence = doc.data();
 
+                // Récupération des messages liés à l'urgence
                 const messageSnapshot = await db.collection("messages")
                     .where("idUrgence", "==", urgence.idUrgence)
-                    .orderBy("timestamp", "asc")
-                    .get();
-                urgence.messages = messageSnapshot.docs.map(m => m.data());
+                    .get(); // Retrait de orderBy pour éviter l'erreur d'index
 
-                const serviceSnapshot = await db.collection("servicesSantes")
-                    .doc(urgence.idAssistant)
-                    .get();
-                urgence.serviceSante = serviceSnapshot.exists ? serviceSnapshot.data() : null;
+                // Tri des messages par timestamp côté serveur
+                urgence.messages = messageSnapshot.docs
+                    .map(m => m.data())
+                    .sort((a, b) => a.timestamp - b.timestamp);
+
+                // Récupération du service de santé lié
+                if (urgence.idAssistant) {
+                    const serviceSnapshot = await db.collection("servicesSantes")
+                        .doc(urgence.idAssistant)
+                        .get();
+                    urgence.serviceSante = serviceSnapshot.exists ? serviceSnapshot.data() : null;
+                } else {
+                    urgence.serviceSante = null;
+                }
 
                 return urgence;
             })
         );
+
+        // Supprime le mot de passe pour ne pas l'envoyer dans la réponse
         const { motDePasse: _, ...patientSafe } = patient;
 
         console.log("===== ✅ LOGIN RÉUSSI =====");
         console.log("👤 Patient :", patient.nom, patient.prenom);
 
-        res.status(200).json({ success: true, message: "Connexion réussie", token, patient: patientSafe, urgences });
+        res.status(200).json({
+            success: true,
+            message: "Connexion réussie",
+            token,
+            patient: patientSafe,
+            urgences
+        });
 
     } catch (error) {
         console.error("❌ Erreur loginPatient:", error);
         res.status(500).json({ success: false, message: "Erreur serveur" });
     }
 };
-
 
 
 
@@ -384,6 +403,76 @@ const getAllPatients = async (req, res) => {
     }
 };
 
+
+const getPatientsForUrgence = async (req, res) => {
+    console.log("📌 Début getPatientsForUrgence");
+    console.log("📥 Requête reçue :", req.query);
+    
+    try {
+        const { idUrgence } = req.query; // optionnel : si fourni, filtre les patients liés à cette urgence
+        console.log("🔹 idUrgence :", idUrgence);
+    
+        let patientsSnapshot;
+        let patients = [];
+    
+        if (idUrgence) {
+            console.log("🔎 Recherche de l'urgence avec ID :", idUrgence);
+            const urgenceDoc = await db.collection("urgences").doc(idUrgence).get();
+    
+            if (!urgenceDoc.exists) {
+                console.warn("⚠️ Urgence introuvable :", idUrgence);
+                return res.status(404).json({
+                    success: false,
+                    message: "Urgence introuvable"
+                });
+            }
+    
+            const urgenceData = urgenceDoc.data();
+            console.log("✅ Urgence trouvée :", urgenceData);
+    
+            const patientId = urgenceData.idPatient;
+            console.log("🔹 ID du patient lié :", patientId);
+    
+            const patientDoc = await db.collection("patients").doc(patientId).get();
+            if (!patientDoc.exists) {
+                console.warn("⚠️ Patient lié à l'urgence introuvable :", patientId);
+                return res.status(404).json({
+                    success: false,
+                    message: "Patient lié à l'urgence introuvable"
+                });
+            }
+    
+            const patientData = { id: patientDoc.id, ...patientDoc.data() };
+            console.log("✅ Patient récupéré :", patientData);
+            patients.push(patientData);
+    
+        } else {
+            console.log("🔎 Récupération de tous les patients");
+            patientsSnapshot = await db.collection("patients").get();
+            patients = patientsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            console.log(`✅ ${patients.length} patients récupérés`);
+        }
+    
+        console.log("📤 Envoi des données au client");
+        return res.status(200).json({
+            success: true,
+            message: "Patients récupérés avec succès",
+            data: patients
+        });
+    
+    } catch (error) {
+        console.error("❌ Erreur getPatientsForUrgence :", error);
+        return res.status(500).json({
+            success: false,
+            message: "Erreur serveur",
+            error: error.message
+        });
+    }
+    
+    };
+
+
+
 module.exports = {
     deleteAccountPatient,
     logoutPatient,
@@ -391,6 +480,7 @@ module.exports = {
     addPatient,
     updatePatient,
     getAllPatients,
-    changePasswordPatient
+    changePasswordPatient,
+    getPatientsForUrgence
 };
 

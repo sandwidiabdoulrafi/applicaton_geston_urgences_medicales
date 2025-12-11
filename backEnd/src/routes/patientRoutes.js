@@ -1,5 +1,5 @@
 const express = require("express");
-const { addPatient, changePasswordPatient,  loginPatient,logoutPatient, updatePatient,deleteAccountPatient, getAllPatients } = require("../controllers/patientController");
+const { addPatient, changePasswordPatient, getPatientsForUrgence,  loginPatient,logoutPatient, updatePatient,deleteAccountPatient, getAllPatients } = require("../controllers/patientController");
 
 const router = express.Router();
 
@@ -21,6 +21,9 @@ router.post("/logout", logoutPatient);
 router.post("/change_password", changePasswordPatient);
 
 
+// Récupérer tous les patients associés à une urgence
+
+router.post("/patient/:idPatient", getPatientsForUrgence);
 
 // Supprimer un patient
 router.delete("/delete", deleteAccountPatient);
@@ -29,3 +32,6 @@ router.delete("/delete", deleteAccountPatient);
 router.get("/get_all", getAllPatients);
 
 module.exports = router;
+
+
+

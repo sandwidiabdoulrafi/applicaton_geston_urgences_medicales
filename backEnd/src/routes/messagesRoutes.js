@@ -6,6 +6,7 @@ const {
     updateMessageStatus,
     deleteMessage,
     uploadMedia,
+    getAllMessageForUser,
 } = require("../controllers/messagesController");
 
 const multer = require('multer');
@@ -28,6 +29,13 @@ router.delete("/:idMessage", deleteMessage);
 
 // sauvergarde des fichier du message
 router.post("/upload",upload.single('file'), uploadMedia);
+
+router.post("/message/:idUser", getAllMessageForUser);
+
+
+
+
+
 
 module.exports = router;
     

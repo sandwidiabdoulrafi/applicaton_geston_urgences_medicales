@@ -118,6 +118,12 @@ socket.on("serviceIntervient", async ({ idUrgence, idService }) => {
         const urgenceDoc = urgenceQuery.docs[0];
         const urgenceData = urgenceDoc.data();
 
+
+        console.log("\n\n\n\n=======================================================================\n\n\n")
+        console.log("urgenceData: ", urgenceData);
+        console.log("\n\n\n\n=======================================================================\n\n\n")
+
+
         // 2️⃣ Vérifier le statut
         if (["en_cours", "terminee"].includes(urgenceData.statut)) {
             return socket.emit("serviceIntervientError", { 
@@ -147,6 +153,12 @@ socket.on("serviceIntervient", async ({ idUrgence, idService }) => {
         }
 
         const serviceData = serviceQuery.docs[0].data();
+
+
+        console.log("\n\n\n\n=======================================================================\n\n\n")
+        console.log("serviceData: ", serviceData);
+        console.log("\n\n\n\n=======================================================================\n\n\n")
+
 
         // 4️⃣ Récupérer les infos du patient (AVANT la mise à jour)
         const patientQuery = await db
@@ -217,6 +229,13 @@ socket.on("serviceIntervient", async ({ idUrgence, idService }) => {
         // 3️⃣ Pour le Layout (ServiceUrgenceLayout.tsx)
         // → Sauvegarder l'urgence comme "urgence en cours"
         io.to(`service_${idService}`).emit("urgenceStatusChanged", updateData);
+
+
+        console.log("\n\n\n\n=======================================================================\n\n\n")
+        console.log("updateData: ", updateData);
+        console.log("\n\n\n\n=======================================================================\n\n\n")
+
+
         console.log(`📤 urgenceStatusChanged → service_${idService}`);
 
         // 4️⃣ Informations du patient pour le service
@@ -226,8 +245,15 @@ socket.on("serviceIntervient", async ({ idUrgence, idService }) => {
 
         // Envoyer au patient 
 
-        io.to(`patient_${interventionData.idPatient}`).emit("urgenceAccepteByService", interventionData);
-        console.log(`📤 urgenceAccepteByService → patient_${interventionData.idPatient}`);
+
+
+        console.log("\n\n\n\n=======================================================================\n\n\n")
+        console.log("interventionData: ", interventionData);
+        console.log("\n\n\n\n=======================================================================\n\n\n")
+
+
+        io.to(`patient_${ urgenceData.idPatient}`).emit("urgenceAccepteByService", interventionData);
+        console.log(`📤 urgenceAccepteByService → patient_${urgenceData.idPatient}`);
 
         // 5️⃣ Retirer de la room globale des services disponibles
         io.to("services_sante").emit("urgenceRemoved", { idUrgence });
@@ -245,24 +271,6 @@ socket.on("serviceIntervient", async ({ idUrgence, idService }) => {
     }
 });
 
-// // 📌 Note : Assurez-vous que le service s'abonne à sa room lors de la connexion
-// socket.on("serviceConnected", ({ idService }) => {
-//     socket.join(`service_${idService}`);
-//     console.log(`✅ Service ${idService} connecté à sa room`);
-// });
-    
-};
 
 
-
-
-
-
-
-
-
-
-
-
-
-
+}

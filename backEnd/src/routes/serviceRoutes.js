@@ -8,7 +8,8 @@ const {
     getServiceById,
     loginService,
     logoutService,
-    changePasswordService
+    changePasswordService,
+    getServicesForUrgence   
 } = require("../controllers/serviceController");
 
 // Créer un service de santé
@@ -35,5 +36,9 @@ router.delete("/delete", deleteAccountService);
 
 router.post("/logout", logoutService);
 
+//Récupérer tous les services associés à une urgence
+router.post("/service/:idUrgence", getServicesForUrgence);
+
 module.exports = router;
+
 

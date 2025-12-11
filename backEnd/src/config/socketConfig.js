@@ -90,11 +90,25 @@ const initializeSocket = (server, handlers = {}) => {
         // ═══════════════════════════════════════════
 
         // Rejoindre une salle d'urgence spécifique
-        socket.on("joinUrgence", (idUrgence) => {
-            socket.join(`urgence_${idUrgence}`);
-            console.log(`🔗 Socket ${socket.id} a rejoint urgence_${idUrgence}`);
+        socket.on("joinUrgence", (data) => {
+            // Normaliser l'ID envoyé
+            const idUrgence = data?.idUrgence || data;
+        
+            if (!idUrgence || typeof idUrgence !== "string") {
+                console.log("❌ idUrgence invalide :", data);
+                return;
+            }
+        
+            const roomName = `urgence_${idUrgence}`;
+        
+            socket.join(roomName);
+        
+            console.log("idUrgence normalisé :", idUrgence);
+            console.log(`🔗 Socket ${socket.id} a rejoint ${roomName}`);
+        
             socket.emit("urgenceJoined", { idUrgence, socketId: socket.id });
         });
+        
 
         // Rejoindre la salle des services de santé
         socket.on("joinServiceSante", (serviceId) => {

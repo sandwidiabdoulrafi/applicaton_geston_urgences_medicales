@@ -18,5 +18,13 @@ router.get("/get_all", urgenceController.getAllUrgence);
 // Service intervient sur une urgence (Socket intégré)
 router.post("/intervention", urgenceController.serviceIntervient);
 
+// Récupérer toutes les urgences d’un utilisateur (patient ou service)
+router.post("/user/:idUser", urgenceController.getUrgencesForUser);
+
 
 module.exports = router;
+
+
+
+
+// /user/${idUser}
